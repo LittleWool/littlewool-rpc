@@ -1,20 +1,18 @@
-package com.littlewool.tech.insight.rpc;
+package com.littlewool.tech.insight.rpc.consumer;
 
 import java.util.concurrent.ExecutionException;
 
 /**
- * @ClassName: Main
+ * @ClassName: ConsumerApp
  * @Description:
  * @Author: LittleWool
- * @Date: 2026/1/12 10:04
+ * @Date: 2026/1/12 20:22
  * @Version: 1.0
  **/
 
-public class Main {
+public class ConsumerApp {
     public static void main(String[] args) throws ExecutionException, InterruptedException {
         Consumer consumer = new Consumer();
-
         System.out.println(consumer.add(1, 2));
-        System.out.println(consumer.add(13, 27));
     }
 }
