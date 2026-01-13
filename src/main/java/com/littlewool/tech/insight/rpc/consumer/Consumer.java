@@ -7,6 +7,7 @@ import com.littlewool.tech.insight.rpc.exception.RpcException;
 import com.littlewool.tech.insight.rpc.message.Request;
 import com.littlewool.tech.insight.rpc.message.Response;
 import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
@@ -14,8 +15,11 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @ClassName: Consumer
@@ -27,43 +31,63 @@ import java.util.concurrent.ExecutionException;
 
 public class Consumer implements Add {
 
+    private Map<Integer, CompletableFuture<?>> inFlightRequestTable = new ConcurrentHashMap<>();
+
+    private final ConnectionManager connectionManager=new ConnectionManager(createBootstrap());
+
+    private Bootstrap createBootstrap() {
+        Bootstrap bootstrap = new Bootstrap();
+        return bootstrap.group(new NioEventLoopGroup())
+                .channel(NioSocketChannel.class)
+                .handler(new ChannelInitializer<NioSocketChannel>() {
+                    @Override
+                    protected void initChannel(NioSocketChannel nioSocketChannel) throws Exception {
+                        nioSocketChannel.pipeline()
+                                .addLast(new LWDecoder())
+                                .addLast(new RequestEncoder())
+                                .addLast(new SimpleChannelInboundHandler<Response>() {
+                                    @Override
+                                    protected void channelRead0(ChannelHandlerContext channelHandlerContext,
+                                                                Response response) throws Exception {
+                                        CompletableFuture requestFuture =
+                                                inFlightRequestTable.remove(response.getRequestId());
+                                        if (response.getCode() == 200) {
+                                            requestFuture.complete(Integer.valueOf(response.getResult().toString()));
+                                        } else {
+                                            requestFuture.completeExceptionally(new RpcException(response.getErrorMessage()));
+                                        }
+//                                        channelHandlerContext.close();
+                                    }
+                                });
+                    }
+                });
+    }
+
     @Override
     public int add(int a, int b) {
         try {
             CompletableFuture<Integer> resFuture = new CompletableFuture<>();
             Bootstrap bootstrap = new Bootstrap();
-            bootstrap.group(new NioEventLoopGroup())
-                    .channel(NioSocketChannel.class)
-                    .handler(new ChannelInitializer<NioSocketChannel>() {
-                        @Override
-                        protected void initChannel(NioSocketChannel nioSocketChannel) throws Exception {
-                            nioSocketChannel.pipeline()
-                                    .addLast(new LWDecoder())
-                                    .addLast(new RequestEncoder())
-                                    .addLast(new SimpleChannelInboundHandler<Response>() {
-                                        @Override
-                                        protected void channelRead0(ChannelHandlerContext channelHandlerContext,
-                                                                    Response response) throws Exception {
-                                            if (response.getCode() == 200) {
-                                                resFuture.complete(Integer.valueOf(response.getResult().toString()));
-                                            } else {
-                                                resFuture.completeExceptionally(new RpcException(response.getErrorMessage()));
-                                            }
-                                            channelHandlerContext.close();
-                                        }
-                                    });
-                        }
-                    });
-            ChannelFuture channelFuture = bootstrap.connect("localhost", 8888).sync();
+
+
+            Channel channel = connectionManager.getChannel("localhost", 8888);
+            if (null == channel) {
+                throw new RuntimeException("provider 连接失败");
+            }
             Request request = new Request();
             request.setServiceName(Add.class.getName());
-            request.setMethodName("add");
+            request.setMethodName("" +
+                    "add");
             request.setParamClass(new Class[]{int.class, int.class});
             request.setParams(new Object[]{a, b});
-            channelFuture.channel().writeAndFlush(request);
-            return resFuture.get();
+            channel.writeAndFlush(request).addListener(f -> {
+                if (f.isSuccess()) {
+                    inFlightRequestTable.put(request.getRequestId(), resFuture);
+                }
+            });
+            return resFuture.get(3, TimeUnit.SECONDS);
         } catch (Exception e) {
-            throw new RuntimeException("方法调用异常",e);
+            throw new RuntimeException(e);
         }
 
     }

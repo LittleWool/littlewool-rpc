@@ -2,6 +2,8 @@ package com.littlewool.tech.insight.rpc.message;
 
 import lombok.Data;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * @ClassName: Request
  * @Description:
@@ -11,6 +13,9 @@ import lombok.Data;
  **/
 @Data
 public class Request {
+    private static final AtomicInteger REQUEST_INTEGER=new AtomicInteger();
+
+    private int requestId= REQUEST_INTEGER.getAndIncrement();
 
     private String serviceName;
     private String methodName;

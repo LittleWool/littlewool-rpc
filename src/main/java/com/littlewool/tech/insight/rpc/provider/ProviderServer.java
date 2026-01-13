@@ -100,7 +100,7 @@ public class ProviderServer {
             ProviderRegistry.Invocation<?> invocation = registry.findService(request.getServiceName());
 
             if(null==invocation){
-                Response fail = Response.fail(String.format("%s 没有对应的处理服务", request.getServiceName()));
+                Response fail = Response.fail(String.format("%s 没有对应的处理服务", request.getServiceName()),request.getRequestId());
                 channelHandlerContext.writeAndFlush(fail);
                 return;
             }
@@ -108,9 +108,9 @@ public class ProviderServer {
             try {
                 Object result = invocation.invoke(request.getMethodName(),request.getParamClass(), request.getParams());
                 log.info("{} 函数被调用了{}，结果是{}",request.getServiceName(),request.getMethodName(),request);
-                channelHandlerContext.writeAndFlush(Response.success(result));
+                channelHandlerContext.writeAndFlush(Response.success(result,request.getRequestId()));
             }catch (Exception e ){
-                channelHandlerContext.writeAndFlush(Response.fail(e.getMessage()));
+                channelHandlerContext.writeAndFlush(Response.fail(e.getMessage(),request.getRequestId()));
             }
 
         }
