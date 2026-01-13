@@ -1,7 +1,9 @@
 package com.littlewool.tech.insight.rpc.consumer;
 
+import com.littlewool.tech.insight.rpc.api.Add;
 import com.littlewool.tech.insight.rpc.codec.LWDecoder;
 import com.littlewool.tech.insight.rpc.codec.RequestEncoder;
+import com.littlewool.tech.insight.rpc.exception.RpcException;
 import com.littlewool.tech.insight.rpc.message.Request;
 import com.littlewool.tech.insight.rpc.message.Response;
 import io.netty.bootstrap.Bootstrap;
@@ -23,36 +25,54 @@ import java.util.concurrent.ExecutionException;
  * @Version: 1.0
  **/
 
-public class Consumer {
+public class Consumer implements Add {
 
-    public int add(int a,int b) throws InterruptedException, ExecutionException {
-        CompletableFuture<Integer> resFuture=new CompletableFuture<>();
-        Bootstrap bootstrap=new Bootstrap();
-        bootstrap.group(new NioEventLoopGroup())
-                .channel(NioSocketChannel.class)
-                .handler(new ChannelInitializer<NioSocketChannel>() {
-                    @Override
-                    protected void initChannel(NioSocketChannel nioSocketChannel) throws Exception {
-                        nioSocketChannel.pipeline()
-                                .addLast(new LWDecoder())
-                                .addLast(new RequestEncoder())
-                                .addLast(new SimpleChannelInboundHandler<Response>() {
-                                    @Override
-                                    protected void channelRead0(ChannelHandlerContext channelHandlerContext, Response response) throws Exception {
-                                        System.out.println(response);
-                                        int res=Integer.valueOf(response.getResult().toString());
-                                        resFuture.complete(res);
-                                    }
-                                });
-                    }
-                });
-        ChannelFuture channelFuture = bootstrap.connect("localhost", 8888).sync();
-        Request request=new Request();
-        request.setServiceName("service1");
-        request.setMethodName("method1");
-        request.setParamClass(new String[]{"int","int"});
-        request.setParams(new Object[]{1,2});
-        channelFuture.channel().writeAndFlush(request);
-        return resFuture.get();
+    @Override
+    public int add(int a, int b) {
+        try {
+            CompletableFuture<Integer> resFuture = new CompletableFuture<>();
+            Bootstrap bootstrap = new Bootstrap();
+            bootstrap.group(new NioEventLoopGroup())
+                    .channel(NioSocketChannel.class)
+                    .handler(new ChannelInitializer<NioSocketChannel>() {
+                        @Override
+                        protected void initChannel(NioSocketChannel nioSocketChannel) throws Exception {
+                            nioSocketChannel.pipeline()
+                                    .addLast(new LWDecoder())
+                                    .addLast(new RequestEncoder())
+                                    .addLast(new SimpleChannelInboundHandler<Response>() {
+                                        @Override
+                                        protected void channelRead0(ChannelHandlerContext channelHandlerContext,
+                                                                    Response response) throws Exception {
+                                            if (response.getCode() == 200) {
+                                                resFuture.complete(Integer.valueOf(response.getResult().toString()));
+                                            } else {
+                                                resFuture.completeExceptionally(new RpcException(response.getErrorMessage()));
+                                            }
+                                            channelHandlerContext.close();
+                                        }
+                                    });
+                        }
+                    });
+            ChannelFuture channelFuture = bootstrap.connect("localhost", 8888).sync();
+            Request request = new Request();
+            request.setServiceName(Add.class.getName());
+            request.setMethodName("add");
+            request.setParamClass(new Class[]{int.class, int.class});
+            request.setParams(new Object[]{a, b});
+            channelFuture.channel().writeAndFlush(request);
+            return resFuture.get();
+        } catch (Exception e) {
+            throw new RuntimeException("方法调用异常",e);
+        }
+
+    }
+
+    public class ConsumerClass extends SimpleChannelInboundHandler {
+
+        @Override
+        protected void channelRead0(ChannelHandlerContext channelHandlerContext, Object o) throws Exception {
+
+        }
     }
 }

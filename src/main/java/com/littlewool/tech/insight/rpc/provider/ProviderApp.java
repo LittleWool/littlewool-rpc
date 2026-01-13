@@ -1,5 +1,7 @@
 package com.littlewool.tech.insight.rpc.provider;
 
+import com.littlewool.tech.insight.rpc.api.Add;
+
 /**
  * @ClassName: ProviderApp
  * @Description:
@@ -11,6 +13,7 @@ package com.littlewool.tech.insight.rpc.provider;
 public class ProviderApp {
     public static void main(String[] args) {
         ProviderServer providerServer = new ProviderServer(8888);
+        providerServer.register(Add.class,new AddImpl());
         providerServer.start();
     }
 }

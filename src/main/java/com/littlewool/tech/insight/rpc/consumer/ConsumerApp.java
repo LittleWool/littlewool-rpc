@@ -1,5 +1,7 @@
 package com.littlewool.tech.insight.rpc.consumer;
 
+import com.littlewool.tech.insight.rpc.api.Add;
+
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -12,7 +14,9 @@ import java.util.concurrent.ExecutionException;
 
 public class ConsumerApp {
     public static void main(String[] args) throws ExecutionException, InterruptedException {
-        Consumer consumer = new Consumer();
-        System.out.println(consumer.add(1, 2));
+       Add add= new Consumer();
+        System.out.println(add.add(1, 2));
+        System.out.println(add.add(11, 23));
+
     }
 }

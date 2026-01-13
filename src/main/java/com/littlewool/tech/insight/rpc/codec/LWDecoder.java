@@ -1,6 +1,7 @@
 package com.littlewool.tech.insight.rpc.codec;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONReader;
 import com.alibaba.fastjson2.TypeReference;
 import com.littlewool.tech.insight.rpc.message.Message;
 import com.littlewool.tech.insight.rpc.message.Request;
@@ -55,7 +56,7 @@ public class LWDecoder extends LengthFieldBasedFrameDecoder {
             String jsonString = new String(body, "UTF-8");
             // 如果Request类有泛型参数
             return JSON.parseObject(jsonString, new TypeReference<Response>() {
-            });
+            },JSONReader.Feature.SupportClassForName);
         } catch (Exception e) {
             throw new RuntimeException("FastJSON2反序列化失败", e);
         }
@@ -66,7 +67,7 @@ public class LWDecoder extends LengthFieldBasedFrameDecoder {
             String jsonString = new String(body, "UTF-8");
             // 如果Request类有泛型参数
             return JSON.parseObject(jsonString, new TypeReference<Request>() {
-            });
+            }, JSONReader.Feature.SupportClassForName);
         } catch (Exception e) {
             throw new RuntimeException("FastJSON2反序列化失败", e);
         }
