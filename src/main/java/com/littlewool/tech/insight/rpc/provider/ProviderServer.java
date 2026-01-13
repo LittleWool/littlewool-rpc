@@ -34,6 +34,7 @@ public class ProviderServer {
     private EventLoopGroup workerEventLoopGroup;
 
     private  final ProviderRegistry registry;
+
     public ProviderServer(int port) {
         this.port = port;
         this.registry=new ProviderRegistry();

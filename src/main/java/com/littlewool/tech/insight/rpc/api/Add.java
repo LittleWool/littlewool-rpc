@@ -10,4 +10,6 @@ package com.littlewool.tech.insight.rpc.api;
 
 public interface Add{
     public int add(int a,int b);
+
+    public int minus(int a,int b);
 }
