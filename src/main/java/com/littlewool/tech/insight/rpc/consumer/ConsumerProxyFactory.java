@@ -3,6 +3,9 @@ package com.littlewool.tech.insight.rpc.consumer;
 import com.littlewool.tech.insight.rpc.codec.LWDecoder;
 import com.littlewool.tech.insight.rpc.codec.RequestEncoder;
 import com.littlewool.tech.insight.rpc.exception.RpcException;
+import com.littlewool.tech.insight.rpc.loadbalance.LoadBalancer;
+import com.littlewool.tech.insight.rpc.loadbalance.RandomLoadBalancer;
+import com.littlewool.tech.insight.rpc.loadbalance.RoundRobinLoadBalancer;
 import com.littlewool.tech.insight.rpc.message.Request;
 import com.littlewool.tech.insight.rpc.message.Response;
 import com.littlewool.tech.insight.rpc.register.DefaultServiceRegistry;
@@ -57,15 +60,28 @@ public class ConsumerProxyFactory {
     @SuppressWarnings("unchecked")
     public <I> I createConsumerProxy(Class<I> interfaceClass) {
         return (I) Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(), new Class[]{interfaceClass},
-                new ConsumerInvocationHandler(interfaceClass));
+                new ConsumerInvocationHandler(interfaceClass,createLoadBalanmcer()));
+    }
+    private LoadBalancer createLoadBalanmcer(){
+        switch (this.consumerProperties.getLoadBalancePolicy()){
+            case "robin":
+                return new RoundRobinLoadBalancer();
+            case "random":
+                return new RandomLoadBalancer();
+            default:
+                throw new IllegalArgumentException(this.consumerProperties.getLoadBalancePolicy()+"负载均衡不支持");
+        }
     }
 
     private class ConsumerInvocationHandler implements InvocationHandler {
 
         private Class<?> interfaceClass;
 
-        public ConsumerInvocationHandler(Class<?> interfaceClass) {
+        final LoadBalancer loadBalancer;
+
+        public ConsumerInvocationHandler(Class<?> interfaceClass, LoadBalancer loadBalancer) {
             this.interfaceClass = interfaceClass;
+            this.loadBalancer = loadBalancer;
         }
 
         @Override
@@ -81,7 +97,7 @@ public class ConsumerProxyFactory {
                     throw new RpcException(interfaceClass.getName() + "没有对应的provider");
                 }
 
-                ServiceMetadata providerMetadata = serviceMetadata.get(0);
+                ServiceMetadata providerMetadata = loadBalancer.select(serviceMetadata);
 
                 Channel channel = connectionManager.getChannel(providerMetadata.getHost(), providerMetadata.getPort());
                 if (null == channel) {
@@ -97,7 +113,7 @@ public class ConsumerProxyFactory {
                         responseFuture.completeExceptionally(f.cause());
                     }
                 });
-                Response response = responseFuture.get(consumerProperties.getRequestTimeoutMs(), TimeUnit.MICROSECONDS);
+                Response response = responseFuture.get(consumerProperties.getRequestTimeoutMs(), TimeUnit.MILLISECONDS);
                 return processResponse(response);
 
             } catch (RpcException rpcException) {
