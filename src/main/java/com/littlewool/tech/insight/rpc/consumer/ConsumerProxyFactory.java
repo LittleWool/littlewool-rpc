@@ -65,6 +65,7 @@ public class ConsumerProxyFactory {
         this.servieRegistry.init(consumerProperties.getRegistryConfig());
         connectionManager = new ConnectionManager(createBootstrap(consumerProperties));
         inFlightRequestTable = new ConcurrentHashMap<>();
+        //一秒缓冲时间 防止response找不到request 空返回 9：36视频
         timeoutTimer = new HashedWheelTimer(1, TimeUnit.SECONDS, 64);
     }
 
@@ -141,11 +142,43 @@ public class ConsumerProxyFactory {
                 retryContext.setLoadBalancer(this.loadBalancer);
                 retryContext.setRequestTimeoutMs(consumerProperties.getRequestTimeoutMs());
                 //需要重新buildrequest
-                retryContext.setDoRpcFunction(provider -> callRpcAsync(buildRequest(method, args), provider));
+                retryContext.setDoRpcFunction(provider -> callRpcAsync(buildRequest(method, args), providerMetadata));
                 response = this.retryPolicy.retry(retryContext);
             }
             return processResponse(response);
 
+        }
+
+        private CompletableFuture<Response> callRpcAsync(Request request, ServiceMetadata provider) {
+            CompletableFuture<Response> responseFuture = new CompletableFuture<>();
+            Channel channel = connectionManager.getChannel(provider.getHost(), provider.getPort());
+
+            if (null == channel) {
+                responseFuture.completeExceptionally(new RpcException("provider 连接失败"));
+                return responseFuture;
+            }
+            inFlightRequestTable.put(request.getRequestId(), responseFuture);
+            //定时给请求进行异常结束 也就是超时 方便超时时移除request
+            Timeout timeout = timeoutTimer.newTimeout((t) -> responseFuture.completeExceptionally(new TimeoutException()),
+                            consumerProperties.getRequestTimeoutMs(), TimeUnit.MILLISECONDS);
+            //正常或者异常结束时候移除,但超时时候自身实际上并不会触发异常所以需要定时任务
+            responseFuture.whenComplete((r, e) -> {
+                inFlightRequestTable.remove(request.getRequestId());
+                timeout.cancel();
+            });
+
+            //先放入，防止调用过快，还未将request放入map
+            channel.writeAndFlush(request).addListener(f -> {
+                log.info("发送了request {}",request.getRequestId());
+                if (!f.isSuccess()) {
+                    log.info("request {}发送失败",request.getRequestId());
+                    //发送失败直接结束，不再继续等待3秒
+                    responseFuture.completeExceptionally(f.cause());
+                }else{
+                    log.info("request {}发送成功",request.getRequestId());
+                }
+            });
+            return responseFuture;
         }
 
         private static Object processResponse(Response response) {
@@ -162,36 +195,6 @@ public class ConsumerProxyFactory {
             request.setParamClass(method.getParameterTypes());
             request.setParams(args);
             return request;
-        }
-
-        private CompletableFuture<Response> callRpcAsync(Request request, ServiceMetadata provider) {
-            CompletableFuture<Response> responseFuture = new CompletableFuture<>();
-            Channel channel = connectionManager.getChannel(provider.getHost(), provider.getPort());
-
-            if (null == channel) {
-                responseFuture.completeExceptionally(new RpcException("provider 连接失败"));
-                return responseFuture;
-            }
-            inFlightRequestTable.put(request.getRequestId(), responseFuture);
-            //定时给请求进行异常结束 也就是超时 方便超时时移除request
-            Timeout timeout =
-                    timeoutTimer.newTimeout((t) -> responseFuture.completeExceptionally(new TimeoutException()),
-                            consumerProperties.getRequestTimeoutMs(), TimeUnit.MILLISECONDS);
-            //正常或者异常结束时候移除,但超时时候自身实际上并不会触发异常所以需要定时任务
-            responseFuture.whenComplete((r, e) -> {
-                inFlightRequestTable.remove(request.getRequestId());
-                timeout.cancel();
-            });
-
-            //先放入，防止调用过快，还未将request放入map
-            channel.writeAndFlush(request).addListener(f -> {
-                log.info("发送了request {}",request.getRequestId());
-                if (!f.isSuccess()) {
-                    //发送失败直接结束，不再继续等待3秒
-                    responseFuture.completeExceptionally(f.cause());
-                }
-            });
-            return responseFuture;
         }
 
         private Object invokeObjectMethod(Object proxy, Method method, Object[] args) {

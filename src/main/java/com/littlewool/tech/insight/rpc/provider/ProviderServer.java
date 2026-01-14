@@ -5,7 +5,6 @@ import com.littlewool.tech.insight.rpc.codec.ResponseEncoder;
 import com.littlewool.tech.insight.rpc.message.Request;
 import com.littlewool.tech.insight.rpc.message.Response;
 import com.littlewool.tech.insight.rpc.register.DefaultServiceRegistry;
-import com.littlewool.tech.insight.rpc.register.RegistryConfig;
 import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
 import com.littlewool.tech.insight.rpc.register.ServieRegistry;
 import io.netty.bootstrap.ServerBootstrap;
@@ -17,8 +16,6 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import lombok.extern.slf4j.Slf4j;
-
-import java.lang.reflect.InvocationTargetException;
 
 /**
  * @ClassName: Provider
@@ -120,7 +117,7 @@ public class ProviderServer {
         protected void channelRead0(ChannelHandlerContext channelHandlerContext,
                                     Request request) {
             ProviderRegistry.Invocation<?> invocation = registry.findService(request.getServiceName());
-
+            log.info("收到request {}",request.getRequestId());
             if (null == invocation) {
                 Response fail = Response.fail(String.format("%s 没有对应的处理服务", request.getServiceName()),
                         request.getRequestId());
