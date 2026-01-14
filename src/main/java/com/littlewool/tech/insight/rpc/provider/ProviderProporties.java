@@ -1,0 +1,20 @@
+package com.littlewool.tech.insight.rpc.provider;
+
+import com.littlewool.tech.insight.rpc.register.RegistryConfig;
+import lombok.Data;
+
+/**
+ * @ClassName: ProviderProporties
+ * @Description:
+ * @Author: LittleWool
+ * @Date: 2026/1/14 10:46
+ * @Version: 1.0
+ **/
+@Data
+public class ProviderProporties {
+    private String host;
+    private int port;
+    private int workThreadNum=4;
+
+    private RegistryConfig registryConfig;
+}

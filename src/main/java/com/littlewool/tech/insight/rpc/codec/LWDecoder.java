@@ -32,21 +32,29 @@ public class LWDecoder extends LengthFieldBasedFrameDecoder {
     @Override
     protected Object decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
         ByteBuf frame = (ByteBuf) super.decode(ctx, in);
-        byte[] magic = new byte[Message.MAGIC.length];
-        frame.readBytes(magic);
-        if (!Arrays.equals(magic, Message.MAGIC)) {
-            throw new RuntimeException("魔数不正确,协议无效");
+        if (null==frame){
+            return null;
         }
-        byte messageType = frame.readByte();
-        byte[] body = new byte[frame.readableBytes()];
-        frame.readBytes(body);
-        if (Objects.equals(Message.MessageType.REQUEST.getCode(), messageType)) {
-            return deserializeRequest(body);
+        try {
+            byte[] magic = new byte[Message.MAGIC.length];
+            frame.readBytes(magic);
+            if (!Arrays.equals(magic, Message.MAGIC)) {
+                throw new RuntimeException("魔数不正确,协议无效");
+            }
+            byte messageType = frame.readByte();
+            byte[] body = new byte[frame.readableBytes()];
+            frame.readBytes(body);
+            if (Objects.equals(Message.MessageType.REQUEST.getCode(), messageType)) {
+                return deserializeRequest(body);
+            }
+            if (Objects.equals(Message.MessageType.RESPONSE.getCode(), messageType)) {
+                return deserializeResponse(body);
+            }
+            throw new RuntimeException("解析类型不支持");
+        }finally {
+            frame.release();
         }
-        if (Objects.equals(Message.MessageType.RESPONSE.getCode(), messageType)) {
-            return deserializeResponse(body);
-        }
-        throw new RuntimeException("解析类型不支持");
+
 
     }
 

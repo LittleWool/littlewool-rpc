@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * @ClassName: DefaultServiceRegister
+ * @ClassName: DefaultServiceRegistry
  * @Description:
  * @Author: LittleWool
  * @Date: 2026/1/14 10:21
@@ -16,14 +16,14 @@ import java.util.Map;
  **/
 
 @Slf4j
-public class DefaultServiceRegister implements ServieRegister {
-    ServieRegister delegate;
+public class DefaultServiceRegistry implements ServieRegistry {
+    ServieRegistry delegate;
     Map<String, List<ServiceMetadata>> cache = new HashMap<>();
 
     @Override
-    public void init(RegisterConfig registerConfig) throws Exception {
-        this.delegate = createServiceRegister(registerConfig);
-        this.delegate.init(registerConfig);
+    public void init(RegistryConfig registryConfig) throws Exception {
+        this.delegate = createServiceRegister(registryConfig);
+        this.delegate.init(registryConfig);
     }
 
     @Override
@@ -45,13 +45,13 @@ public class DefaultServiceRegister implements ServieRegister {
         }
     }
 
-    public static ServieRegister createServiceRegister(RegisterConfig registerConfig) {
-        if ("zookeeper".equals(registerConfig.getRegisterType())) {
-            return new ZookeeperServiceRegister();
+    public static ServieRegistry createServiceRegister(RegistryConfig registryConfig) {
+        if ("zookeeper".equals(registryConfig.getRegisterType())) {
+            return new ZookeeperServiceRegistry();
         }
-        if ("Redis".equals(registerConfig.getRegisterType())) {
-            return new RedisServiceRegister();
+        if ("Redis".equals(registryConfig.getRegisterType())) {
+            return new RedisServiceRegistry();
         }
-        throw new IllegalArgumentException(registerConfig.getRegisterType() + "没有实现");
+        throw new IllegalArgumentException(registryConfig.getRegisterType() + "没有实现");
     }
 }

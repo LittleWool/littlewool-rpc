@@ -4,10 +4,10 @@ import com.littlewool.tech.insight.rpc.codec.LWDecoder;
 import com.littlewool.tech.insight.rpc.codec.ResponseEncoder;
 import com.littlewool.tech.insight.rpc.message.Request;
 import com.littlewool.tech.insight.rpc.message.Response;
-import com.littlewool.tech.insight.rpc.register.DefaultServiceRegister;
-import com.littlewool.tech.insight.rpc.register.RegisterConfig;
+import com.littlewool.tech.insight.rpc.register.DefaultServiceRegistry;
+import com.littlewool.tech.insight.rpc.register.RegistryConfig;
 import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
-import com.littlewool.tech.insight.rpc.register.ServieRegister;
+import com.littlewool.tech.insight.rpc.register.ServieRegistry;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
@@ -30,59 +30,57 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ProviderServer {
 
-    private int port;
+    private final ProviderRegistry registry;
 
-    private String host;
+    private final ServieRegistry servieRegistry;
+
+    private ProviderProporties providerProporties;
 
     private EventLoopGroup bossEventLoopGroup;
 
     private EventLoopGroup workerEventLoopGroup;
 
-    private  final ProviderRegistry registry;
 
-    private ServieRegister servieRegister;
-
-    private RegisterConfig registerConfig;
-    public ProviderServer(String host, int port, RegisterConfig registerConfig) {
-        this.host = host;
-        this.port = port;
-        this.registry=new ProviderRegistry();
-        this.servieRegister= new DefaultServiceRegister();
-        this.registerConfig=registerConfig;
+    public ProviderServer(ProviderProporties providerProporties) {
+        this.providerProporties=providerProporties;
+        this.registry = new ProviderRegistry();
+        this.servieRegistry = new DefaultServiceRegistry();
     }
 
     public void start() {
         bossEventLoopGroup = new NioEventLoopGroup();
-        workerEventLoopGroup = new NioEventLoopGroup(4);
+        workerEventLoopGroup = new NioEventLoopGroup(providerProporties.getWorkThreadNum());
         try {
-            this.servieRegister.init(registerConfig);
-        ServerBootstrap serverBootstrap = new ServerBootstrap();
-        serverBootstrap.group(bossEventLoopGroup, workerEventLoopGroup)
-                .channel(NioServerSocketChannel.class)
-                .childHandler(new ChannelInitializer<NioSocketChannel>() {
-                    @Override
-                    protected void initChannel(NioSocketChannel nioSocketChannel) throws Exception {
-                        nioSocketChannel.pipeline()
-                                .addLast(new LWDecoder())
-                                .addLast(new ResponseEncoder())
-                                .addLast(new ProviderHandler());
-                    }
-                });
+            this.servieRegistry.init(providerProporties.getRegistryConfig());
+            ServerBootstrap serverBootstrap = new ServerBootstrap();
+            serverBootstrap.group(bossEventLoopGroup, workerEventLoopGroup)
+                    .channel(NioServerSocketChannel.class)
+                    .childHandler(new ChannelInitializer<NioSocketChannel>() {
+                        @Override
+                        protected void initChannel(NioSocketChannel nioSocketChannel) throws Exception {
+                            nioSocketChannel.pipeline()
+                                    .addLast(new LWDecoder())
+                                    .addLast(new ResponseEncoder())
+                                    .addLast(new ProviderHandler());
+                        }
+                    });
 
-            serverBootstrap.bind(port).sync();
+            serverBootstrap.bind(providerProporties.getHost(),providerProporties.getPort()).sync();
             //注册到注册中心
-            registry.allServiceName().stream().map(this::buildMetadata).forEach(this. servieRegister::registerService);
+            registry.allServiceName().stream().map(this::buildMetadata).forEach(this.servieRegistry::registerService);
         } catch (Exception e) {
             throw new RuntimeException("服务器启动异常", e);
         }
     }
-    private ServiceMetadata buildMetadata(String serviceName){
-        ServiceMetadata metadata=new ServiceMetadata();
+
+    private ServiceMetadata buildMetadata(String serviceName) {
+        ServiceMetadata metadata = new ServiceMetadata();
         metadata.setServiceName(serviceName);
-        metadata.setHost(host);
-        metadata.setPort(port);
+        metadata.setHost(providerProporties.getHost());
+        metadata.setPort(providerProporties.getPort());
         return metadata;
     }
+
     public void stop() {
         if (null != bossEventLoopGroup) {
             bossEventLoopGroup.shutdown();
@@ -92,26 +90,27 @@ public class ProviderServer {
         }
     }
 
-    public <I> void register(Class<I> interfaceClass, I serviceInstance){
-        registry.register(interfaceClass,serviceInstance);
+    public <I> void register(Class<I> interfaceClass, I serviceInstance) {
+        registry.register(interfaceClass, serviceInstance);
     }
-    public class ProviderHandler extends SimpleChannelInboundHandler<Request>{
+
+    public class ProviderHandler extends SimpleChannelInboundHandler<Request> {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            log.info("地址:{}连接了",ctx.channel().remoteAddress());
+            log.info("地址:{}连接了", ctx.channel().remoteAddress());
             super.channelActive(ctx);
         }
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            log.error("发生了异常",cause);
+            log.error("发生了异常", cause);
             ctx.channel().close();
         }
 
         @Override
         public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-            log.info("地址:{}断开连接",ctx.channel().remoteAddress());
+            log.info("地址:{}断开连接", ctx.channel().remoteAddress());
             super.channelInactive(ctx);
         }
 
@@ -120,18 +119,20 @@ public class ProviderServer {
                                     Request request) throws Exception {
             ProviderRegistry.Invocation<?> invocation = registry.findService(request.getServiceName());
 
-            if(null==invocation){
-                Response fail = Response.fail(String.format("%s 没有对应的处理服务", request.getServiceName()),request.getRequestId());
+            if (null == invocation) {
+                Response fail = Response.fail(String.format("%s 没有对应的处理服务", request.getServiceName()),
+                        request.getRequestId());
                 channelHandlerContext.writeAndFlush(fail);
                 return;
             }
 
             try {
-                Object result = invocation.invoke(request.getMethodName(),request.getParamClass(), request.getParams());
-                log.info("{} 函数被调用了{}，结果是{}",request.getServiceName(),request.getMethodName(),request);
-                channelHandlerContext.writeAndFlush(Response.success(result,request.getRequestId()));
-            }catch (Exception e ){
-                channelHandlerContext.writeAndFlush(Response.fail(e.getMessage(),request.getRequestId()));
+                Object result = invocation.invoke(request.getMethodName(), request.getParamClass(),
+                        request.getParams());
+                log.info("{} 函数被调用了{}，结果是{}", request.getServiceName(), request.getMethodName(), request);
+                channelHandlerContext.writeAndFlush(Response.success(result, request.getRequestId()));
+            } catch (Exception e) {
+                channelHandlerContext.writeAndFlush(Response.fail(e.getMessage(), request.getRequestId()));
             }
 
         }

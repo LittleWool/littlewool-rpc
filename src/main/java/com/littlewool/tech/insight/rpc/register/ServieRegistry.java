@@ -3,15 +3,15 @@ package com.littlewool.tech.insight.rpc.register;
 import java.util.List;
 
 /**
- * @ClassName: ServieRegister
+ * @ClassName: ServieRegistry
  * @Description:
  * @Author: LittleWool
  * @Date: 2026/1/13 20:09
  * @Version: 1.0
  **/
 
-public interface ServieRegister {
-    void init(RegisterConfig registerConfig) throws Exception;
+public interface ServieRegistry {
+    void init(RegistryConfig registryConfig) throws Exception;
 
     void registerService(ServiceMetadata metadata);
 

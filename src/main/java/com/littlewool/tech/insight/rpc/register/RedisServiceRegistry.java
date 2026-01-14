@@ -2,11 +2,10 @@ package com.littlewool.tech.insight.rpc.register;
 
 import lombok.extern.slf4j.Slf4j;
 
-import javax.imageio.spi.ServiceRegistry;
 import java.util.List;
 
 /**
- * @ClassName: RedisServiceRegister
+ * @ClassName: RedisServiceRegistry
  * @Description:
  * @Author: LittleWool
  * @Date: 2026/1/14 10:01
@@ -14,9 +13,9 @@ import java.util.List;
  **/
 
 @Slf4j
-public class RedisServiceRegister implements ServieRegister {
+public class RedisServiceRegistry implements ServieRegistry {
     @Override
-    public void init(RegisterConfig registerConfig) throws Exception {
+    public void init(RegistryConfig registryConfig) throws Exception {
         log.info("Redis 注册中心还未实现");
     }
 

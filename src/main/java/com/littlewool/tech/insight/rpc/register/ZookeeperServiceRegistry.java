@@ -9,11 +9,10 @@ import org.apache.curator.x.discovery.ServiceDiscoveryBuilder;
 import org.apache.curator.x.discovery.ServiceInstance;
 import org.apache.curator.x.discovery.details.JsonInstanceSerializer;
 
-import java.util.Collection;
 import java.util.List;
 
 /**
- * @ClassName: ZookeeperServiceRegister
+ * @ClassName: ZookeeperServiceRegistry
  * @Description:
  * @Author: LittleWool
  * @Date: 2026/1/13 20:29
@@ -21,15 +20,15 @@ import java.util.List;
  **/
 
 @Slf4j
-public class ZookeeperServiceRegister implements ServieRegister {
+public class ZookeeperServiceRegistry implements ServieRegistry {
     private final String BASE_PATH = "/littlewool/rpc";
     private CuratorFramework client;
     private ServiceDiscovery<ServiceMetadata> discovery;
 
     @Override
-    public void init(RegisterConfig registerConfig) throws Exception {
+    public void init(RegistryConfig registryConfig) throws Exception {
         client = CuratorFrameworkFactory.builder()
-                .connectString(registerConfig.getConnectString())
+                .connectString(registryConfig.getConnectString())
                 .sessionTimeoutMs(30000)
                 .connectionTimeoutMs(3000)
                 .retryPolicy(new ExponentialBackoffRetry(1000, 3))
