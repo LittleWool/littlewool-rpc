@@ -2,9 +2,12 @@ package com.littlewool.tech.insight.rpc.provider;
 
 import com.littlewool.tech.insight.rpc.codec.LWDecoder;
 import com.littlewool.tech.insight.rpc.codec.ResponseEncoder;
-import com.littlewool.tech.insight.rpc.exception.RpcException;
 import com.littlewool.tech.insight.rpc.message.Request;
 import com.littlewool.tech.insight.rpc.message.Response;
+import com.littlewool.tech.insight.rpc.register.DefaultServiceRegister;
+import com.littlewool.tech.insight.rpc.register.RegisterConfig;
+import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
+import com.littlewool.tech.insight.rpc.register.ServieRegister;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
@@ -29,21 +32,30 @@ public class ProviderServer {
 
     private int port;
 
+    private String host;
+
     private EventLoopGroup bossEventLoopGroup;
 
     private EventLoopGroup workerEventLoopGroup;
 
     private  final ProviderRegistry registry;
 
-    public ProviderServer(int port) {
+    private ServieRegister servieRegister;
+
+    private RegisterConfig registerConfig;
+    public ProviderServer(String host, int port, RegisterConfig registerConfig) {
+        this.host = host;
         this.port = port;
         this.registry=new ProviderRegistry();
+        this.servieRegister= new DefaultServiceRegister();
+        this.registerConfig=registerConfig;
     }
 
     public void start() {
         bossEventLoopGroup = new NioEventLoopGroup();
         workerEventLoopGroup = new NioEventLoopGroup(4);
-
+        try {
+            this.servieRegister.init(registerConfig);
         ServerBootstrap serverBootstrap = new ServerBootstrap();
         serverBootstrap.group(bossEventLoopGroup, workerEventLoopGroup)
                 .channel(NioServerSocketChannel.class)
@@ -56,13 +68,21 @@ public class ProviderServer {
                                 .addLast(new ProviderHandler());
                     }
                 });
-        try {
+
             serverBootstrap.bind(port).sync();
-        } catch (InterruptedException e) {
+            //注册到注册中心
+            registry.allServiceName().stream().map(this::buildMetadata).forEach(this. servieRegister::registerService);
+        } catch (Exception e) {
             throw new RuntimeException("服务器启动异常", e);
         }
     }
-
+    private ServiceMetadata buildMetadata(String serviceName){
+        ServiceMetadata metadata=new ServiceMetadata();
+        metadata.setServiceName(serviceName);
+        metadata.setHost(host);
+        metadata.setPort(port);
+        return metadata;
+    }
     public void stop() {
         if (null != bossEventLoopGroup) {
             bossEventLoopGroup.shutdown();

@@ -1,7 +1,11 @@
 package com.littlewool.tech.insight.rpc.provider;
 
+import org.checkerframework.checker.units.qual.A;
+
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -42,5 +46,8 @@ public class ProviderRegistry {
             Method invokeMethod= intefaceClass.getDeclaredMethod(methodName, paramsClass);
             return invokeMethod.invoke(serviceInstance,params);
         }
+    }
+    public List<String> allServiceName(){
+        return new ArrayList<>(map.keySet());
     }
 }

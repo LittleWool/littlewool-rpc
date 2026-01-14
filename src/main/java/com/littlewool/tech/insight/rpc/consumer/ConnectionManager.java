@@ -27,14 +27,16 @@ public class ConnectionManager {
         this.bootstrap = bootstrap;
     }
 
-    //若是之前有未连接的channel，但之后可以联通了，貌似不能更新状态
+
     public Channel getChannel(String host, int port) {
         String key = host + ":" + port;
+
         ChannelWrapper channelWrapper = channelTables.computeIfAbsent(key, (k) -> {
             try {
                 ChannelFuture channelFuture = bootstrap.connect(host, port).sync();
 
                 //TODO 这里的监听器原理是什么,
+                //这里加入监听器，是防止注册失败 之后调用会因为之前存入的null一直受阻
                 channelFuture.channel().closeFuture().addListener((f) -> {channelTables.remove(key);});
 
                 return new ChannelWrapper(channelFuture.channel());
