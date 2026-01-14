@@ -18,6 +18,8 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import lombok.extern.slf4j.Slf4j;
 
+import java.lang.reflect.InvocationTargetException;
+
 /**
  * @ClassName: Provider
  * @Description:
@@ -116,7 +118,7 @@ public class ProviderServer {
 
         @Override
         protected void channelRead0(ChannelHandlerContext channelHandlerContext,
-                                    Request request) throws Exception {
+                                    Request request) {
             ProviderRegistry.Invocation<?> invocation = registry.findService(request.getServiceName());
 
             if (null == invocation) {
@@ -127,11 +129,14 @@ public class ProviderServer {
             }
 
             try {
+                long startTime=System.currentTimeMillis();
+                log.info("开始时间"+startTime);
                 Object result = invocation.invoke(request.getMethodName(), request.getParamClass(),
                         request.getParams());
-                log.info("{} 函数被调用了{}，结果是{}", request.getServiceName(), request.getMethodName(), request);
+                log.info("requestId{},{}函数被调用了{},结果是{},耗时是{}",request.getRequestId(), request.getServiceName(), request.getMethodName(), request,System.currentTimeMillis()-startTime);
                 channelHandlerContext.writeAndFlush(Response.success(result, request.getRequestId()));
             } catch (Exception e) {
+                Response failReso=Response.fail(e.getMessage(),request.getRequestId());
                 channelHandlerContext.writeAndFlush(Response.fail(e.getMessage(), request.getRequestId()));
             }
 

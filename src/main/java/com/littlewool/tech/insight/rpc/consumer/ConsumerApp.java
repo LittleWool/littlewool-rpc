@@ -14,22 +14,14 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ConsumerApp {
     public static void main(String[] args) throws Exception {
-        RegistryConfig registryConfig =new RegistryConfig();
+        RegistryConfig registryConfig = new RegistryConfig();
         registryConfig.setRegisterType("zookeeper");
         registryConfig.setConnectString("127.0.0.1:2181");
-        ConsumerProperties consumerProperties=new ConsumerProperties();
+        ConsumerProperties consumerProperties = new ConsumerProperties();
         consumerProperties.setRegistryConfig(registryConfig);
-        ConsumerProxyFactory consumerProxyFactory=new ConsumerProxyFactory(consumerProperties);
+        ConsumerProxyFactory consumerProxyFactory = new ConsumerProxyFactory(consumerProperties);
         Add consumer = consumerProxyFactory.createConsumerProxy(Add.class);
-        while (true){
-            try {
-                System.out.println(consumer.add(13, 22));
-            }catch (Exception e){
-                e.printStackTrace();
-            }
-            Thread.sleep(1000);
-        }
-
+        System.out.println(consumer.add(13, 22));
 
     }
 
