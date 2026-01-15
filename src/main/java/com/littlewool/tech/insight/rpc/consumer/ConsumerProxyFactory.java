@@ -148,7 +148,7 @@ public class ConsumerProxyFactory {
         private CompletableFuture<Response> callRpcAsync(Request request, ServiceMetadata provider) {
             CompletableFuture<Response> responseFuture = inFlightRequestManager.inFlightRequest(request,
                     consumerProperties.getRequestTimeoutMs(),provider);
-            Channel channel = connectionManager.getChannel(provider.getHost(), provider.getPort());
+            Channel channel = connectionManager.getChannel(provider);
 
             if (null == channel) {
                 responseFuture.completeExceptionally(new RpcException("provider 连接失败"));
