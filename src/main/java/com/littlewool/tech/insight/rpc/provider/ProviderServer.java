@@ -2,20 +2,28 @@ package com.littlewool.tech.insight.rpc.provider;
 
 import com.littlewool.tech.insight.rpc.codec.LWDecoder;
 import com.littlewool.tech.insight.rpc.codec.ResponseEncoder;
+import com.littlewool.tech.insight.rpc.limit.ConcurrencyLimiter;
+import com.littlewool.tech.insight.rpc.limit.Limiter;
+import com.littlewool.tech.insight.rpc.limit.RateLimiter;
 import com.littlewool.tech.insight.rpc.message.Request;
 import com.littlewool.tech.insight.rpc.message.Response;
 import com.littlewool.tech.insight.rpc.register.DefaultServiceRegistry;
 import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
 import com.littlewool.tech.insight.rpc.register.ServieRegistry;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @ClassName: Provider
@@ -33,15 +41,17 @@ public class ProviderServer {
 
     private final ServieRegistry servieRegistry;
 
-    private ProviderProporties providerProporties;
+    private final ProviderProporties providerProporties;
 
+    private final Limiter globalLimiter;
     private EventLoopGroup bossEventLoopGroup;
 
     private EventLoopGroup workerEventLoopGroup;
 
 
     public ProviderServer(ProviderProporties providerProporties) {
-        this.providerProporties=providerProporties;
+        this.providerProporties = providerProporties;
+        this.globalLimiter = new ConcurrencyLimiter(providerProporties.getGlobalMaxRequest());
         this.registry = new ProviderRegistry();
         this.servieRegistry = new DefaultServiceRegistry();
     }
@@ -60,11 +70,12 @@ public class ProviderServer {
                             nioSocketChannel.pipeline()
                                     .addLast(new LWDecoder())
                                     .addLast(new ResponseEncoder())
+                                    .addLast(new LimitHandler())
                                     .addLast(new ProviderHandler());
                         }
                     });
 
-            serverBootstrap.bind(providerProporties.getHost(),providerProporties.getPort()).sync();
+            serverBootstrap.bind(providerProporties.getHost(), providerProporties.getPort()).sync();
             //注册到注册中心
             registry.allServiceName().stream().map(this::buildMetadata).forEach(this.servieRegistry::registerService);
         } catch (Exception e) {
@@ -91,6 +102,59 @@ public class ProviderServer {
 
     public <I> void register(Class<I> interfaceClass, I serviceInstance) {
         registry.register(interfaceClass, serviceInstance);
+    }
+
+    public class LimitHandler extends ChannelDuplexHandler {
+        private static final AttributeKey<Limiter> CHANNEL_LIMITER_KEY = AttributeKey.valueOf("channle_limiter_key");
+        private static final AttributeKey<AtomicInteger> GLOBAL_PERMITS = AttributeKey.valueOf("global_permits");
+
+        @Override
+        public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+            Request request = (Request) msg;
+            log.info("request {}进入限流器",request.getRequestId());
+            if (!globalLimiter.tryAcquire()) {
+                ctx.writeAndFlush(Response.fail("全局provider 限流", request.getRequestId()));
+                return;
+            }
+            Limiter channelLimiter = ctx.channel().attr(CHANNEL_LIMITER_KEY).get();
+            if (!channelLimiter.tryAcquire()) {
+                globalLimiter.release();
+                ctx.writeAndFlush(Response.fail("channel provider 限流", request.getRequestId()));
+                return;
+            }
+
+            log.info("request {}通过限流器",request.getRequestId());
+            ctx.channel().attr(GLOBAL_PERMITS).get().incrementAndGet();
+            ctx.fireChannelRead(request);
+        }
+
+        @Override
+        public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+
+            promise.addListener(f -> {
+                int remain = ctx.channel().attr(GLOBAL_PERMITS).get().getAndDecrement();
+                if(remain>=0){
+                    ctx.channel().attr(CHANNEL_LIMITER_KEY).get().release();
+                    globalLimiter.release();
+                }
+            });
+            ctx.write(msg,promise);
+        }
+
+        @Override
+        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+            int remain = ctx.channel().attr(GLOBAL_PERMITS).get().getAndSet(0);
+            globalLimiter.release(remain);
+            ctx.fireChannelInactive();
+        }
+
+        @Override
+        public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            RateLimiter channelLimiter = new RateLimiter(providerProporties.getPerConsumerMaxRequest());
+            ctx.channel().attr(CHANNEL_LIMITER_KEY).set(channelLimiter);
+            ctx.channel().attr(GLOBAL_PERMITS).set(new AtomicInteger(0));
+            ctx.fireChannelActive();
+        }
     }
 
     public class ProviderHandler extends SimpleChannelInboundHandler<Request> {
@@ -126,13 +190,14 @@ public class ProviderServer {
             }
 
             try {
-                long startTime=System.currentTimeMillis();
+                long startTime = System.currentTimeMillis();
                 Object result = invocation.invoke(request.getMethodName(), request.getParamClass(),
                         request.getParams());
-                log.info("requestId{},{}函数被调用了{},结果是{},耗时是{}",request.getRequestId(), request.getServiceName(), request.getMethodName(), request,System.currentTimeMillis()-startTime);
+                log.info("requestId{},{}函数被调用了{},结果是{},耗时是{}", request.getRequestId(), request.getServiceName(),
+                        request.getMethodName(), request, System.currentTimeMillis() - startTime);
                 channelHandlerContext.writeAndFlush(Response.success(result, request.getRequestId()));
             } catch (Exception e) {
-                Response failReso=Response.fail(e.getMessage(),request.getRequestId());
+                Response failReso = Response.fail(e.getMessage(), request.getRequestId());
                 channelHandlerContext.writeAndFlush(Response.fail(e.getMessage(), request.getRequestId()));
             }
 

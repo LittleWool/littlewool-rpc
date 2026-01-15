@@ -24,6 +24,8 @@ public class ConsumerApp {
         consumerProperties.setRegistryConfig(registryConfig);
         ConsumerProxyFactory consumerProxyFactory = new ConsumerProxyFactory(consumerProperties);
         Add consumer = consumerProxyFactory.createConsumerProxy(Add.class);
+        consumerProperties.setRpcPerChannel(100000);
+        consumerProperties.setRpcPerSecond(100000);
         CyclicBarrier cyclicBarrier=new CyclicBarrier(10);
         for (int i = 0; i < 10; i++) {
             new Thread(()->{

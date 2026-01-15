@@ -1,5 +1,7 @@
 package com.littlewool.tech.insight.rpc.consumer;
 
+import com.littlewool.tech.insight.rpc.codec.LWDecoder;
+import com.littlewool.tech.insight.rpc.codec.RequestEncoder;
 import com.littlewool.tech.insight.rpc.exception.LimitException;
 import com.littlewool.tech.insight.rpc.limit.ConcurrencyLimiter;
 import com.littlewool.tech.insight.rpc.limit.Limiter;
@@ -7,6 +9,11 @@ import com.littlewool.tech.insight.rpc.limit.RateLimiter;
 import com.littlewool.tech.insight.rpc.message.Request;
 import com.littlewool.tech.insight.rpc.message.Response;
 import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.Timeout;
 import lombok.extern.slf4j.Slf4j;
@@ -92,4 +99,9 @@ public class InFlightRequestManager {
         }
         return future.completeExceptionally(e);
     }
+    public void clearChannel(ServiceMetadata metadata){
+        channelLimiterMap.remove(metadata);
+    }
+
+
 }

@@ -12,5 +12,9 @@ public interface Limiter {
 
     boolean tryAcquire();
 
-    void release();
+    default void release(){
+        release(1);
+    }
+
+    void release(int permits);
 }

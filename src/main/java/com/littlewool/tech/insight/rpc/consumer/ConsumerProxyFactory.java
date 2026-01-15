@@ -1,9 +1,6 @@
 package com.littlewool.tech.insight.rpc.consumer;
 
-import com.littlewool.tech.insight.rpc.codec.LWDecoder;
-import com.littlewool.tech.insight.rpc.codec.RequestEncoder;
 import com.littlewool.tech.insight.rpc.exception.RpcException;
-import com.littlewool.tech.insight.rpc.limit.RateLimiter;
 import com.littlewool.tech.insight.rpc.loadbalance.LoadBalancer;
 import com.littlewool.tech.insight.rpc.loadbalance.RandomLoadBalancer;
 import com.littlewool.tech.insight.rpc.loadbalance.RoundRobinLoadBalancer;
@@ -17,25 +14,14 @@ import com.littlewool.tech.insight.rpc.retry.ForkingRetryPolicy;
 import com.littlewool.tech.insight.rpc.retry.RetryContext;
 import com.littlewool.tech.insight.rpc.retry.RetryPolicy;
 import com.littlewool.tech.insight.rpc.retry.RetrySame;
-import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.util.HashedWheelTimer;
-import io.netty.util.Timeout;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -64,8 +50,8 @@ public class ConsumerProxyFactory {
         this.consumerProperties = consumerProperties;
         this.servieRegistry = new DefaultServiceRegistry();
         this.servieRegistry.init(consumerProperties.getRegistryConfig());
-        connectionManager = new ConnectionManager(createBootstrap(consumerProperties));
         this.inFlightRequestManager = new InFlightRequestManager(consumerProperties);
+        connectionManager = new ConnectionManager(inFlightRequestManager,consumerProperties);
     }
 
     @SuppressWarnings("unchecked")
@@ -141,7 +127,6 @@ public class ConsumerProxyFactory {
             if(e instanceof ExecutionException ee &&ee.getCause() instanceof RpcException rpcException && !rpcException.retry()){
                 throw rpcException;
             }
-            Response response;
             //重试
             long timeRemaining = consumerProperties.getMethodTimeoutMs() - (System.currentTimeMillis() - startTime);
             if (timeRemaining <= 0) {
@@ -156,7 +141,7 @@ public class ConsumerProxyFactory {
             retryContext.setRequestTimeoutMs(consumerProperties.getRequestTimeoutMs());
             //需要重新buildrequest
             retryContext.setDoRpcFunction(provider -> callRpcAsync(buildRequest(method, args), provider));
-            response = this.retryPolicy.retry(retryContext);
+            Response response = this.retryPolicy.retry(retryContext);
             return response;
         }
 
@@ -184,6 +169,7 @@ public class ConsumerProxyFactory {
         }
 
         private static Object processResponse(Response response) {
+            log.info(response.toString());
             if (response.getCode() == 200) {
                 return response.getResult();
             }
@@ -213,45 +199,7 @@ public class ConsumerProxyFactory {
         }
     }
 
-    private Bootstrap createBootstrap(ConsumerProperties consumerProperties) {
-        Bootstrap bootstrap = new Bootstrap();
-        return bootstrap.group(new NioEventLoopGroup(consumerProperties.getWorkThreadNum()))
-                .channel(NioSocketChannel.class)
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, consumerProperties.getConnectTimeoutMs())
-                .handler(new ChannelInitializer<NioSocketChannel>() {
-                    @Override
-                    protected void initChannel(NioSocketChannel nioSocketChannel) throws Exception {
-                        nioSocketChannel.pipeline()
-                                .addLast(new LWDecoder())
-                                .addLast(new RequestEncoder())
-                                .addLast(new ConsumerHandler());
-                    }
-                });
-    }
 
-    private class ConsumerHandler extends SimpleChannelInboundHandler<Response> {
 
-        @Override
-        protected void channelRead0(ChannelHandlerContext channelHandlerContext, Response response) throws Exception {
-            inFlightRequestManager.completeRequest(response.getRequestId(), response);
-        }
 
-        @Override
-        public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            log.info("地址:{}连接了", ctx.channel().remoteAddress());
-            super.channelActive(ctx);
-        }
-
-        @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            log.error("发生了异常", cause);
-            ctx.channel().close();
-        }
-
-        @Override
-        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-            log.info("地址:{}断开连接", ctx.channel().remoteAddress());
-            super.channelInactive(ctx);
-        }
-    }
 }
