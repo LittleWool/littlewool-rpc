@@ -4,6 +4,9 @@ import com.littlewool.tech.insight.rpc.api.Add;
 import com.littlewool.tech.insight.rpc.register.RegistryConfig;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
+
 /**
  * @ClassName: ConsumerApp
  * @Description:
@@ -21,7 +24,20 @@ public class ConsumerApp {
         consumerProperties.setRegistryConfig(registryConfig);
         ConsumerProxyFactory consumerProxyFactory = new ConsumerProxyFactory(consumerProperties);
         Add consumer = consumerProxyFactory.createConsumerProxy(Add.class);
-        System.out.println(consumer.add(13, 22));
+        CyclicBarrier cyclicBarrier=new CyclicBarrier(10);
+        for (int i = 0; i < 10; i++) {
+            new Thread(()->{
+                try {
+                    cyclicBarrier.await();
+                    System.out.println(consumer.add(1,3));
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                } catch (BrokenBarrierException e) {
+                    throw new RuntimeException(e);
+                }
+
+            }).start();
+        }
 
     }
 

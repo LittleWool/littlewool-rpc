@@ -16,22 +16,22 @@ public class RateLimiter implements Limiter{
     private final AtomicLong nextNs;
     private final long intervalNs;
     private static final int MAX_TRY_ACQUIRE=512;
-    private static final long MAX_QUEUE_NS=TimeUnit.MICROSECONDS.toNanos(500);
+    private static final long MAX_QUEUE_NS=TimeUnit.MILLISECONDS.toNanos(500);
 
     public RateLimiter(int permitsPerSecond) {
-        this.nextNs = new AtomicLong(0);
+        this.nextNs = new AtomicLong(0l);
         this.intervalNs = TimeUnit.SECONDS.toNanos(1)/permitsPerSecond;
     }
 
     @Override
     public boolean tryAcquire() {
         long start = System.currentTimeMillis();
-        for (int i = 0; i < 512; i++) {
+        for (int i = 0; i < MAX_TRY_ACQUIRE; i++) {
             long pre = nextNs.get();
             if(start+MAX_QUEUE_NS<pre){
                 return false;
             }
-            if(nextNs.compareAndSet(pre,System.nanoTime()+intervalNs)){
+            if(nextNs.compareAndSet(pre,Math.max(pre,start)+intervalNs)){
                 return true;
             }
         }

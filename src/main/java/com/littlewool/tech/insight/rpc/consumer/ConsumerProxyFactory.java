@@ -3,6 +3,7 @@ package com.littlewool.tech.insight.rpc.consumer;
 import com.littlewool.tech.insight.rpc.codec.LWDecoder;
 import com.littlewool.tech.insight.rpc.codec.RequestEncoder;
 import com.littlewool.tech.insight.rpc.exception.RpcException;
+import com.littlewool.tech.insight.rpc.limit.RateLimiter;
 import com.littlewool.tech.insight.rpc.loadbalance.LoadBalancer;
 import com.littlewool.tech.insight.rpc.loadbalance.RandomLoadBalancer;
 import com.littlewool.tech.insight.rpc.loadbalance.RoundRobinLoadBalancer;
@@ -35,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -48,7 +50,6 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public class ConsumerProxyFactory {
 
-    private Map<Integer, CompletableFuture<Response>> inFlightRequestTable;
 
     private final ConnectionManager connectionManager;
 
@@ -56,7 +57,7 @@ public class ConsumerProxyFactory {
 
     private final ConsumerProperties consumerProperties;
 
-    private final HashedWheelTimer timeoutTimer;
+    private final InFlightRequestManager inFlightRequestManager;
 
 
     public ConsumerProxyFactory(ConsumerProperties consumerProperties) throws Exception {
@@ -64,9 +65,7 @@ public class ConsumerProxyFactory {
         this.servieRegistry = new DefaultServiceRegistry();
         this.servieRegistry.init(consumerProperties.getRegistryConfig());
         connectionManager = new ConnectionManager(createBootstrap(consumerProperties));
-        inFlightRequestTable = new ConcurrentHashMap<>();
-        //一秒缓冲时间 防止response找不到request 空返回 9：36视频
-        timeoutTimer = new HashedWheelTimer(1, TimeUnit.SECONDS, 64);
+        this.inFlightRequestManager = new InFlightRequestManager(consumerProperties);
     }
 
     @SuppressWarnings("unchecked")
@@ -76,12 +75,15 @@ public class ConsumerProxyFactory {
     }
 
     private RetryPolicy createRetryPolicy() {
-        switch (consumerProperties.getRetryPolicy()){
-            case "retrySame":return new RetrySame();
-            case "failover":return new FailOverRetryPolicy();
-            case "forking":return new ForkingRetryPolicy();
+        switch (consumerProperties.getRetryPolicy()) {
+            case "retrySame":
+                return new RetrySame();
+            case "failover":
+                return new FailOverRetryPolicy();
+            case "forking":
+                return new ForkingRetryPolicy();
         }
-        throw new IllegalArgumentException("没有这个重试策略"+consumerProperties.getRetryPolicy());
+        throw new IllegalArgumentException("没有这个重试策略" + consumerProperties.getRetryPolicy());
     }
 
     private LoadBalancer createLoadBalancer() {
@@ -129,53 +131,53 @@ public class ConsumerProxyFactory {
                 CompletableFuture<Response> requestFuture = callRpcAsync(request, providerMetadata);
                 response = requestFuture.get(consumerProperties.getRequestTimeoutMs(), TimeUnit.MILLISECONDS);
             } catch (Exception e) {
-                //重试
-                long timeRemaining = consumerProperties.getMethodTimeoutMs() - (System.currentTimeMillis() - startTime);
-                if (timeRemaining<=0){
-                    throw new TimeoutException();
-                }
-                log.warn("超时了,进行重试");
-                RetryContext retryContext = new RetryContext();
-                retryContext.setFailedService(providerMetadata);
-                retryContext.setServiceMetadataList(serviceMetadata);
-                retryContext.setMethodTimeoutMs(timeRemaining);
-                retryContext.setLoadBalancer(this.loadBalancer);
-                retryContext.setRequestTimeoutMs(consumerProperties.getRequestTimeoutMs());
-                //需要重新buildrequest
-                retryContext.setDoRpcFunction(provider -> callRpcAsync(buildRequest(method, args), provider));
-                response = this.retryPolicy.retry(retryContext);
+                response = doRetry(method, args, e, startTime, providerMetadata, serviceMetadata);
             }
             return processResponse(response);
 
         }
 
+        private Response doRetry(Method method, Object[] args, Exception e, long startTime, ServiceMetadata providerMetadata, List<ServiceMetadata> serviceMetadata) throws Exception {
+            if(e instanceof ExecutionException ee &&ee.getCause() instanceof RpcException rpcException && !rpcException.retry()){
+                throw rpcException;
+            }
+            Response response;
+            //重试
+            long timeRemaining = consumerProperties.getMethodTimeoutMs() - (System.currentTimeMillis() - startTime);
+            if (timeRemaining <= 0) {
+                throw new TimeoutException();
+            }
+            log.warn("rpc出现了异常,进行重试", e);
+            RetryContext retryContext = new RetryContext();
+            retryContext.setFailedService(providerMetadata);
+            retryContext.setServiceMetadataList(serviceMetadata);
+            retryContext.setMethodTimeoutMs(timeRemaining);
+            retryContext.setLoadBalancer(this.loadBalancer);
+            retryContext.setRequestTimeoutMs(consumerProperties.getRequestTimeoutMs());
+            //需要重新buildrequest
+            retryContext.setDoRpcFunction(provider -> callRpcAsync(buildRequest(method, args), provider));
+            response = this.retryPolicy.retry(retryContext);
+            return response;
+        }
+
         private CompletableFuture<Response> callRpcAsync(Request request, ServiceMetadata provider) {
-            CompletableFuture<Response> responseFuture = new CompletableFuture<>();
+            CompletableFuture<Response> responseFuture = inFlightRequestManager.inFlightRequest(request,
+                    consumerProperties.getRequestTimeoutMs(),provider);
             Channel channel = connectionManager.getChannel(provider.getHost(), provider.getPort());
 
             if (null == channel) {
                 responseFuture.completeExceptionally(new RpcException("provider 连接失败"));
                 return responseFuture;
             }
-            inFlightRequestTable.put(request.getRequestId(), responseFuture);
-            //定时给请求进行异常结束 也就是超时 方便超时时移除request
-            Timeout timeout = timeoutTimer.newTimeout((t) -> responseFuture.completeExceptionally(new TimeoutException()),
-                            consumerProperties.getRequestTimeoutMs(), TimeUnit.MILLISECONDS);
-            //正常或者异常结束时候移除,但超时时候自身实际上并不会触发异常所以需要定时任务
-            responseFuture.whenComplete((r, e) -> {
-                inFlightRequestTable.remove(request.getRequestId());
-                timeout.cancel();
-            });
 
-            //先放入，防止调用过快，还未将request放入map
+            //先放入，防止调用过快，还未将request放入map4
+
             channel.writeAndFlush(request).addListener(f -> {
-                log.info("发送了request {}",request.getRequestId());
+                log.info("发送了request {}", request.getRequestId());
                 if (!f.isSuccess()) {
-                    log.info("request {}发送失败",request.getRequestId());
+                    log.info("request {}发送失败", request.getRequestId());
                     //发送失败直接结束，不再继续等待3秒
                     responseFuture.completeExceptionally(f.cause());
-                }else{
-                    log.info("request {}发送成功",request.getRequestId());
                 }
             });
             return responseFuture;
@@ -231,13 +233,7 @@ public class ConsumerProxyFactory {
 
         @Override
         protected void channelRead0(ChannelHandlerContext channelHandlerContext, Response response) throws Exception {
-            CompletableFuture<Response> requestFuture =
-                    inFlightRequestTable.remove(response.getRequestId());
-            if (null == requestFuture) {
-                log.warn("requstId {} 找不到", response.getRequestId());
-                return;
-            }
-            requestFuture.complete(response);
+            inFlightRequestManager.completeRequest(response.getRequestId(), response);
         }
 
         @Override
