@@ -117,7 +117,7 @@ public class ProviderServer {
         protected void channelRead0(ChannelHandlerContext channelHandlerContext,
                                     Request request) {
             ProviderRegistry.Invocation<?> invocation = registry.findService(request.getServiceName());
-            log.info("收到request {}",request.getRequestId());
+            //log.info("收到request {}",request.getRequestId());
             if (null == invocation) {
                 Response fail = Response.fail(String.format("%s 没有对应的处理服务", request.getServiceName()),
                         request.getRequestId());
@@ -127,7 +127,6 @@ public class ProviderServer {
 
             try {
                 long startTime=System.currentTimeMillis();
-                log.info("开始时间"+startTime);
                 Object result = invocation.invoke(request.getMethodName(), request.getParamClass(),
                         request.getParams());
                 log.info("requestId{},{}函数被调用了{},结果是{},耗时是{}",request.getRequestId(), request.getServiceName(), request.getMethodName(), request,System.currentTimeMillis()-startTime);

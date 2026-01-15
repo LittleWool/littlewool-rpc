@@ -20,9 +20,9 @@ public class AddImpl implements Add {
     @Override
     public int add(int a, int b) {
         Random random=new Random();
-        if(random.nextBoolean()){
-            LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(4));
-        }
+//        if(random.nextBoolean()){
+//            LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(4));
+//        }
         return a+b;
     }
     @Override

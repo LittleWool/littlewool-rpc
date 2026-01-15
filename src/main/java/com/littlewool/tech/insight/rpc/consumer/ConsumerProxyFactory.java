@@ -142,7 +142,7 @@ public class ConsumerProxyFactory {
                 retryContext.setLoadBalancer(this.loadBalancer);
                 retryContext.setRequestTimeoutMs(consumerProperties.getRequestTimeoutMs());
                 //需要重新buildrequest
-                retryContext.setDoRpcFunction(provider -> callRpcAsync(buildRequest(method, args), providerMetadata));
+                retryContext.setDoRpcFunction(provider -> callRpcAsync(buildRequest(method, args), provider));
                 response = this.retryPolicy.retry(retryContext);
             }
             return processResponse(response);

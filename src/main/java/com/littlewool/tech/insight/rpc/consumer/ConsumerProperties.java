@@ -16,7 +16,7 @@ public class ConsumerProperties {
     private Integer connectTimeoutMs=3000;
     private Integer requestTimeoutMs=3000;
     private Integer methodTimeoutMs=10000;
-    private String loadBalancePolicy="robin";
-    private String retryPolicy="retrySame";
+    private String loadBalancePolicy="random";
+    private String retryPolicy="forking";
     private RegistryConfig registryConfig =new RegistryConfig();
 }

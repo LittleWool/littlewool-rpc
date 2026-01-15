@@ -4,6 +4,7 @@ import com.littlewool.tech.insight.rpc.exception.RpcException;
 import com.littlewool.tech.insight.rpc.message.Response;
 import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -19,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 public class ForkingRetryPolicy implements RetryPolicy{
     @Override
     public Response retry(RetryContext retryContext) throws Exception {
-        List<ServiceMetadata> serviceMetadataList = retryContext.getServiceMetadataList();
+        List<ServiceMetadata> serviceMetadataList = new ArrayList<>(retryContext.getServiceMetadataList());
         serviceMetadataList.remove(retryContext.getFailedService());
         if(serviceMetadataList.isEmpty()){
             throw new RpcException("没有可重试的Provider");
