@@ -3,6 +3,10 @@ package com.littlewool.tech.insight.rpc.consumer;
 import com.littlewool.tech.insight.rpc.breaker.CirCuitBreaker;
 import com.littlewool.tech.insight.rpc.breaker.CircuitBreakerManager;
 import com.littlewool.tech.insight.rpc.exception.RpcException;
+import com.littlewool.tech.insight.rpc.fallback.CacheFallback;
+import com.littlewool.tech.insight.rpc.fallback.DefaultFallBack;
+import com.littlewool.tech.insight.rpc.fallback.Fallback;
+import com.littlewool.tech.insight.rpc.fallback.MockFallback;
 import com.littlewool.tech.insight.rpc.loadbalance.LoadBalancer;
 import com.littlewool.tech.insight.rpc.loadbalance.RandomLoadBalancer;
 import com.littlewool.tech.insight.rpc.loadbalance.RoundRobinLoadBalancer;
@@ -51,6 +55,8 @@ public class ConsumerProxyFactory {
 
     private final CircuitBreakerManager circuitBreakerManager;
 
+    private final Fallback fallback;
+
 
     public ConsumerProxyFactory(ConsumerProperties consumerProperties) throws Exception {
         this.consumerProperties = consumerProperties;
@@ -58,6 +64,7 @@ public class ConsumerProxyFactory {
         this.servieRegistry.init(consumerProperties.getRegistryConfig());
         this.inFlightRequestManager = new InFlightRequestManager(consumerProperties);
         this.circuitBreakerManager = new CircuitBreakerManager(consumerProperties);
+        this.fallback = new DefaultFallBack(new CacheFallback(), new MockFallback());
 
         connectionManager = new ConnectionManager(inFlightRequestManager, consumerProperties);
     }
@@ -116,22 +123,31 @@ public class ConsumerProxyFactory {
             List<ServiceMetadata> serviceMetadata =
                     new ArrayList<>(servieRegistry.fetchServiceList(interfaceClass.getName()));
             ServiceMetadata provider = decideProvider(serviceMetadata);
-            Request request = buildRequest(method, args);
-            Response response;
             RpcCallMetrics metrics = RpcCallMetrics.createRpcMetrics(method, args, provider);
+            if (null == provider) {
+                //降级
+                return fallback.fallback(metrics);
+            }
+            Request request = buildRequest(method, args);
+
             CirCuitBreaker breaker = circuitBreakerManager.createOrGetBreaker(provider);
             try {
                 CompletableFuture<Response> requestFuture = callRpcAsync(request, provider);
-                response = requestFuture.get(consumerProperties.getRequestTimeoutMs(), TimeUnit.MILLISECONDS);
-                metrics.doComplete();
+                Response response = requestFuture.get(consumerProperties.getRequestTimeoutMs(), TimeUnit.MILLISECONDS);
+                metrics.doComplete(response);
                 breaker.recordRpc(metrics);
+                fallback.recordMetrics(metrics);
+                return processResponse(response);
             } catch (Exception e) {
                 metrics.errorComplete(e);
                 breaker.recordRpc(metrics);
-                response = doRetry(metrics, serviceMetadata);
             }
-            return processResponse(response);
-
+            try {
+                return processResponse(doRetry(metrics, serviceMetadata));
+            } catch (Exception e) {
+                //降级
+                return fallback.fallback(metrics);
+            }
         }
 
         private ServiceMetadata decideProvider(List<ServiceMetadata> candidate) {
@@ -143,7 +159,7 @@ public class ConsumerProxyFactory {
                 }
                 candidate.remove(select);
             }
-            throw new RpcException("当前没有可以提供服务的provider");
+            return null;
         }
 
         private Response doRetry(RpcCallMetrics metrics, List<ServiceMetadata> serviceMetadata) throws Exception {
@@ -162,7 +178,9 @@ public class ConsumerProxyFactory {
             return response;
         }
 
-        private RetryContext createRetryContextFromFailMetrics(RpcCallMetrics metrics, List<ServiceMetadata> serviceMetadata, long timeRemaining) {
+        private RetryContext createRetryContextFromFailMetrics(RpcCallMetrics metrics,
+                                                               List<ServiceMetadata> serviceMetadata,
+                                                               long timeRemaining) {
             RetryContext retryContext = new RetryContext();
             retryContext.setFailedService(metrics.getProvider());
             retryContext.setServiceMetadataList(serviceMetadata);
@@ -183,7 +201,7 @@ public class ConsumerProxyFactory {
                         metrics.getParams()), provider);
                 retryFuture.whenComplete((r, retryE) -> {
                     if (null == retryE) {
-                        retryMetrics.doComplete();
+                        retryMetrics.doComplete(r);
                     } else {
                         retryMetrics.errorComplete(retryE);
                     }

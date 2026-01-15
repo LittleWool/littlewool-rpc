@@ -1,5 +1,6 @@
 package com.littlewool.tech.insight.rpc.metrics;
 
+import com.littlewool.tech.insight.rpc.message.Response;
 import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
 import lombok.Data;
 
@@ -21,6 +22,7 @@ public class RpcCallMetrics {
     private  Method method;
     private  ServiceMetadata provider;
     private  Object[] params;
+    private Object result;
 
     private RpcCallMetrics() {
 
@@ -35,7 +37,8 @@ public class RpcCallMetrics {
         return rpcCallMetrics;
     }
 
-    public void doComplete(){
+    public void doComplete(Response response){
+        this.result=response.getResult();
         this.complete=true;
         this.duration=System.currentTimeMillis()-startTime;
     }

@@ -26,7 +26,7 @@ public class ConsumerApp {
         Add consumer = consumerProxyFactory.createConsumerProxy(Add.class);
 
         while (true){
-            Thread.sleep(300);
+            Thread.sleep(1000);
             System.out.println(consumer.add(1,2));
         }
 

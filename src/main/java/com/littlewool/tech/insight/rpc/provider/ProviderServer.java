@@ -112,7 +112,6 @@ public class ProviderServer {
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
             Request request = (Request) msg;
-//            log.info("request {}进入限流器",request.getRequestId());
             if (!globalLimiter.tryAcquire()) {
                 ctx.writeAndFlush(Response.fail("全局 provider 限流", request.getRequestId()));
                 return;
@@ -123,8 +122,6 @@ public class ProviderServer {
                 ctx.writeAndFlush(Response.fail("channel provider 限流", request.getRequestId()));
                 return;
             }
-
-//            log.info("request {}通过限流器",request.getRequestId());
             ctx.channel().attr(GLOBAL_PERMITS).get().incrementAndGet();
             ctx.fireChannelRead(request);
         }
