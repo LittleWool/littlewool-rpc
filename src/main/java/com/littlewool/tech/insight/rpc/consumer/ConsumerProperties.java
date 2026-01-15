@@ -15,10 +15,12 @@ public class ConsumerProperties {
     private Integer workThreadNum = 4;
     private Integer connectTimeoutMs=3000;
     private Integer requestTimeoutMs=3000;
-    private Integer methodTimeoutMs=10000;
-    private Integer rpcPerSecond=10;
-    private Integer rpcPerChannel=5;
+    private Integer methodTimeoutMs=30000;
+    private Integer rpcPerSecond=1000;
+    private Integer rpcPerChannel=500;
     private String loadBalancePolicy="robin";
     private String retryPolicy="forking";
+    private double slowRequestBreakingRatio=0.5;
+    private long slowRequestMs=1000L;
     private RegistryConfig registryConfig =new RegistryConfig();
 }

@@ -24,21 +24,10 @@ public class ConsumerApp {
         consumerProperties.setRegistryConfig(registryConfig);
         ConsumerProxyFactory consumerProxyFactory = new ConsumerProxyFactory(consumerProperties);
         Add consumer = consumerProxyFactory.createConsumerProxy(Add.class);
-        consumerProperties.setRpcPerChannel(100000);
-        consumerProperties.setRpcPerSecond(100000);
-        CyclicBarrier cyclicBarrier=new CyclicBarrier(10);
-        for (int i = 0; i < 10; i++) {
-            new Thread(()->{
-                try {
-                    cyclicBarrier.await();
-                    System.out.println(consumer.add(1,3));
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                } catch (BrokenBarrierException e) {
-                    throw new RuntimeException(e);
-                }
 
-            }).start();
+        while (true){
+            Thread.sleep(300);
+            System.out.println(consumer.add(1,2));
         }
 
     }

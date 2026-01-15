@@ -15,7 +15,7 @@ public class ProviderProporties {
     private String host;
     private int port;
     private int workThreadNum=4;
-    private int globalMaxRequest=10;
-    private int perConsumerMaxRequest=5;
+    private int globalMaxRequest=1000;
+    private int perConsumerMaxRequest=500;
     private RegistryConfig registryConfig;
 }

@@ -15,5 +15,11 @@ public interface CirCuitBreaker {
     boolean allowRequest();
 
     void recordRpc(RpcCallMetrics metrics);
+
+    enum State{
+        OPEN,CLOSE,HALF_OPEN
+
+        ;
+    }
 }
 

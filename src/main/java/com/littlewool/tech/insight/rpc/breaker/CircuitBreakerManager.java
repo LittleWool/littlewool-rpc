@@ -16,14 +16,20 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class CircuitBreakerManager {
 
+    private final ConsumerProperties consumerProperties;
+
     public CircuitBreakerManager(ConsumerProperties consumerProperties) {
+        this.consumerProperties = consumerProperties;
     }
 
-    private final Map<ServiceMetadata,CirCuitBreaker> cirCuitBreakerMap=new ConcurrentHashMap<>();
-    public CirCuitBreaker createOrGetBreaker(ServiceMetadata metadata){
-        return cirCuitBreakerMap.computeIfAbsent(metadata,m->createBreaker(m));
+    private final Map<ServiceMetadata, CirCuitBreaker> cirCuitBreakerMap = new ConcurrentHashMap<>();
+
+    public CirCuitBreaker createOrGetBreaker(ServiceMetadata metadata) {
+        return cirCuitBreakerMap.computeIfAbsent(metadata, m -> createBreaker(m));
     }
-    private CirCuitBreaker createBreaker(ServiceMetadata metadata){
-        return null;
+
+    private CirCuitBreaker createBreaker(ServiceMetadata metadata) {
+        return new ResponseTimeCircuitBreaker(consumerProperties.getSlowRequestBreakingRatio(),
+                consumerProperties.getSlowRequestMs());
     }
 }

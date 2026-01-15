@@ -19,14 +19,12 @@ import java.util.concurrent.locks.LockSupport;
 public class AddImpl implements Add {
     @Override
     public int add(int a, int b) {
-        Random random=new Random();
-//        if(random.nextBoolean()){
-//            LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(4));
-//        }
-        return a+b;
+//        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(1500));
+        return a + b;
     }
+
     @Override
     public int minus(int a, int b) {
-        return a-b;
+        return a - b;
     }
 }
