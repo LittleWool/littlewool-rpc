@@ -19,16 +19,18 @@ import java.util.concurrent.ConcurrentHashMap;
  **/
 
 public class CacheFallback implements Fallback{
-    private Map<InvokeKey,Object> rpcResultCache=new ConcurrentHashMap();
+    private final Map<InvokeKey,Object> rpcResultCache=new ConcurrentHashMap();
 
     private static final Object NULL_OBJECT=new Object();
     @Override
     public Object fallback(RpcCallMetrics metrics) {
         InvokeKey invokeKey=new InvokeKey(metrics.getMethod(),metrics.getParams());
         Object cacheResult = rpcResultCache.get(invokeKey);
+        //正常请求返回的结果就是null
         if(cacheResult==NULL_OBJECT){
             return null;
         }
+        //缓存中没有这个请求
         if (cacheResult==null){
             throw new RpcException("缓存降级没招了");
         }

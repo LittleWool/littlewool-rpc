@@ -1,12 +1,11 @@
 package com.littlewool.tech.insight.rpc.fallback;
 
-import com.littlewool.tech.insight.rpc.exception.RpcException;
-import com.littlewool.tech.insight.rpc.metrics.RpcCallMetrics;
-
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import com.littlewool.tech.insight.rpc.exception.RpcException;
+import com.littlewool.tech.insight.rpc.metrics.RpcCallMetrics;
 
 /**
  * @ClassName: MockFallback
@@ -18,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class MockFallback implements Fallback {
 
-    private Map<Class<?>, Object> mockObjectCache = new ConcurrentHashMap<>();
+    private final Map<Class<?>, Object> mockObjectCache = new ConcurrentHashMap<>();
 
     @Override
     public Object fallback(RpcCallMetrics metrics) throws Exception {

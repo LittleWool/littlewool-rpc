@@ -15,18 +15,26 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @Version: 1.0
  **/
 
+/***
+ * 现在实现并不平滑,假设允许1s进入1w请求，在0.95-1.05的时间区间，就可以进入2w,压力巨大。
+ * 可以通过调短定时任务间隔，增加任务频率，限流越精准。但对定时任务压力来说巨大
+ * 所以改为事件驱动的RateLimiter
+ * */
+
 @Deprecated
 public class BucketLimiter implements Limiter {
 
     private final AtomicInteger tokens;
     private final ScheduledFuture<?> scheduledFuture;
 
+    //这是个轻量级的任务，故可以所有对象共用一个，设置为守护线程,不用专门取消
     private static final EventLoopGroup REFILL_EVENT_LOOP = new DefaultEventLoop(r -> {
         //设置成守护线程，这样子主线程结束时候就可以自动结束
         Thread thread = new Thread("regill_event_loop");
         thread.setDaemon(true);
         return thread;
     });
+
 
     public BucketLimiter(int permitsPerSecond) {
         this.tokens = new AtomicInteger(permitsPerSecond);
@@ -49,6 +57,7 @@ public class BucketLimiter implements Limiter {
 
     @Override
     public void release(int permits) {
+        //定时刷新 不需要释放
     }
 
     public void destroy() {

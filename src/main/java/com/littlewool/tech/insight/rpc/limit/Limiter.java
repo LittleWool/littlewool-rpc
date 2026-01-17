@@ -12,7 +12,7 @@ public interface Limiter {
 
     boolean tryAcquire();
 
-    default void release(){
+    default void release() {
         release(1);
     }
 

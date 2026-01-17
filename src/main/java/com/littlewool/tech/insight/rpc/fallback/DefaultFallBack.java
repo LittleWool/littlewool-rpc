@@ -12,8 +12,10 @@ import lombok.extern.slf4j.Slf4j;
  **/
 
 @Slf4j
-public class DefaultFallBack implements Fallback{
+public class DefaultFallBack implements Fallback {
+
     private CacheFallback cacheFallback;
+
     private MockFallback mockFallback;
 
     public DefaultFallBack(CacheFallback cacheFallback, MockFallback mockFallback) {
@@ -28,7 +30,7 @@ public class DefaultFallBack implements Fallback{
     }
 
     @Override
-    public Object fallback(RpcCallMetrics metrics)throws Exception{
+    public Object fallback(RpcCallMetrics metrics) throws Exception {
         try {
             Object fallbackRes = cacheFallback.fallback(metrics);
             return fallbackRes;

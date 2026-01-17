@@ -16,8 +16,8 @@ public class ConsumerProperties {
     private Integer connectTimeoutMs=3000;
     private Integer requestTimeoutMs=3000;
     private Integer methodTimeoutMs=30000;
-    private Integer rpcPerSecond=1000;
-    private Integer rpcPerChannel=500;
+    private Integer rpcPerSecond=100;
+    private Integer rpcPerChannel=3;
     private String loadBalancePolicy="robin";
     private String retryPolicy="forking";
     private double slowRequestBreakingRatio=0.5;

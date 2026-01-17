@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @ClassName: ConnectionManager
- * @Description:
+ * @Description: 连接管理器,实现连接复用
  * @Author: LittleWool
  * @Date: 2026/1/13 10:33
  * @Version: 1.0
@@ -31,32 +31,32 @@ public class ConnectionManager {
     private final Map<String, ChannelWrapper> channelTables = new ConcurrentHashMap<>();
 
     private final Bootstrap bootstrap;
-private final InFlightRequestManager inFlightRequestManager;
+    private final InFlightRequestManager inFlightRequestManager;
+
     public ConnectionManager(InFlightRequestManager inFlightRequestManager, ConsumerProperties consumerProperties) {
         this.inFlightRequestManager = inFlightRequestManager;
         this.bootstrap = createBootstrap(consumerProperties);
     }
 
-
     public Channel getChannel(ServiceMetadata metadata) {
-        String host=metadata.getHost();
-        int port=metadata.getPort();
+        String host = metadata.getHost();
+        int port = metadata.getPort();
         String key = host + ":" + port;
 
         ChannelWrapper channelWrapper = channelTables.computeIfAbsent(key, (k) -> {
             try {
                 ChannelFuture channelFuture = bootstrap.connect(host, port).sync();
-
-                //TODO 这里的监听器原理是什么,
-                //这里加入监听器，是防止注册失败 之后调用会因为之前存入的null一直受阻
-                channelFuture.channel().closeFuture().addListener((f) -> {channelTables.remove(key);
-                inFlightRequestManager.clearChannel(metadata);});
+                // 这里加入监听器，是防止注册失败 之后调用会因为之前存入的null一直受阻
+                channelFuture.channel().closeFuture().addListener((f) -> {
+                    channelTables.remove(key);
+                    inFlightRequestManager.clearChannel(metadata);
+                });
 
                 return new ChannelWrapper(channelFuture.channel());
             } catch (InterruptedException e) {
                 log.error("连接超时{},{}", host, port, e);
                 return new ChannelWrapper(null);
-                //throw new RuntimeException(e);
+                // throw new RuntimeException(e);
             }
         });
         Channel channel = channelWrapper.channel;
@@ -79,23 +79,21 @@ private final InFlightRequestManager inFlightRequestManager;
     private Bootstrap createBootstrap(ConsumerProperties consumerProperties) {
         Bootstrap bootstrap = new Bootstrap();
         return bootstrap.group(new NioEventLoopGroup(consumerProperties.getWorkThreadNum()))
-                .channel(NioSocketChannel.class)
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, consumerProperties.getConnectTimeoutMs())
-                .handler(new ChannelInitializer<NioSocketChannel>() {
-                    @Override
-                    protected void initChannel(NioSocketChannel nioSocketChannel) throws Exception {
-                        nioSocketChannel.pipeline()
-                                .addLast(new LWDecoder())
-                                .addLast(new RequestEncoder())
-                                .addLast(new ConsumerHandler());
-                    }
-                });
+            .channel(NioSocketChannel.class)
+            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, consumerProperties.getConnectTimeoutMs())
+            .handler(new ChannelInitializer<NioSocketChannel>() {
+                @Override
+                protected void initChannel(NioSocketChannel nioSocketChannel) {
+                    nioSocketChannel.pipeline().addLast(new LWDecoder()).addLast(new RequestEncoder())
+                        .addLast(new ConsumerHandler());
+                }
+            });
     }
 
     private class ConsumerHandler extends SimpleChannelInboundHandler<Response> {
 
         @Override
-        protected void channelRead0(ChannelHandlerContext channelHandlerContext, Response response) throws Exception {
+        protected void channelRead0(ChannelHandlerContext channelHandlerContext, Response response) {
             inFlightRequestManager.completeRequest(response.getRequestId(), response);
         }
 
@@ -106,7 +104,7 @@ private final InFlightRequestManager inFlightRequestManager;
         }
 
         @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
             log.error("发生了异常", cause);
             ctx.channel().close();
         }

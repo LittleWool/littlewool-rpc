@@ -2,10 +2,8 @@ package com.littlewool.tech.insight.rpc.consumer;
 
 import com.littlewool.tech.insight.rpc.api.Add;
 import com.littlewool.tech.insight.rpc.register.RegistryConfig;
-import lombok.extern.slf4j.Slf4j;
 
-import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.CyclicBarrier;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * @ClassName: ConsumerApp
@@ -26,7 +24,7 @@ public class ConsumerApp {
         Add consumer = consumerProxyFactory.createConsumerProxy(Add.class);
 
         while (true){
-            Thread.sleep(1000);
+            Thread.sleep(100);
             System.out.println(consumer.add(1,2));
         }
 

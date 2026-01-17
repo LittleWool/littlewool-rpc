@@ -19,17 +19,22 @@ import java.util.concurrent.locks.ReentrantLock;
 public class ResponseTimeCircuitBreaker implements CirCuitBreaker {
     private final AtomicReference<State> stateReference = new AtomicReference<>(State.CLOSE);
 
+    //超时之后的熔断时间
     private final long breakMs = 5000L;
 
-
+    //滑动窗口的时间区间
     private final long windowDuration = 10000L;
 
+    //以1秒为一个slot的区间
     private final long slotMs = 1000L;
 
+    //满请求阈值
     private final long slowRequestMs;
 
+    //慢请求率
     private final double slowRatio;
 
+    //最小请求数 防止两个请求 一个正常一个超时 直接50%慢请求率
     private final int minRequest = 5;
 
     private final Slot[] slots = new Slot[(int) (windowDuration / slotMs)];
@@ -118,12 +123,15 @@ public class ResponseTimeCircuitBreaker implements CirCuitBreaker {
             return;
         }
         try {
+            //存在问题，后到的拿到了锁，导致请求在前的直接返回。而直接把自己的请求统计在后到的位置
+            //不需要修改：1.发生概率低 2.这是个熔断器的统计一段时间内的数据，即使存在一些误差也问题不大
             slideLock.lock();
             int diff = (int) ((now - currentIndex) / slotMs);
             if (diff <= 0) {
                 //双重检查锁
                 return;
             }
+            //需要清空的槽位数
             int step = Math.min(diff, slots.length);
             for (int i = 0; i < step; i++) {
                 int updateIndex = (currentIndex + i + 1) % slots.length;

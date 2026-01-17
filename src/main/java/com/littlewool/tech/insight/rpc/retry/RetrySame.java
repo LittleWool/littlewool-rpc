@@ -26,11 +26,11 @@ public class RetrySame implements RetryPolicy{
         int retryCount=0;
         long startTime=System.currentTimeMillis();
         while (retryCount<retryMax){
-            long nextDelay = nextDelay(retryCount);
+            long nextDelay = nextDelay(retryCount++);
             if(nextDelay>=1000L){
                 nextDelay=1000L;
             }
-
+            //若是等不到下次重试,则抛出超时异常
             long methodTime=retryContext.getMethodTimeoutMs()-(System.currentTimeMillis()-startTime);
             if(methodTime<=0||nextDelay>=methodTime){
                 throw new TimeoutException();
@@ -44,13 +44,13 @@ public class RetrySame implements RetryPolicy{
             }catch (Exception e){
                 log.error("重试失败第{}次",retryCount,e);
             }
-            retryCount++;
 
         }
         throw new RpcException("重试失败");
 
     }
 
+    //使用指数回避 来避免短时间内的频繁重试造成网络风暴，为避免有规律 加入扰动
     private long nextDelay(int retryCount){
         return 100L*(1L<<retryCount)+random.nextInt(50);
     }

@@ -9,7 +9,7 @@ import java.util.Map;
 
 /**
  * @ClassName: DefaultServiceRegistry
- * @Description:
+ * @Description: 使用包装类，装饰器模式，给注册中心加入缓存
  * @Author: LittleWool
  * @Date: 2026/1/14 10:21
  * @Version: 1.0
@@ -17,7 +17,9 @@ import java.util.Map;
 
 @Slf4j
 public class DefaultServiceRegistry implements ServieRegistry {
+    //，在连接不上注册中心时候使用
     ServieRegistry delegate;
+    //TODO 加入淘汰策略
     Map<String, List<ServiceMetadata>> cache = new HashMap<>();
 
     @Override
@@ -36,6 +38,7 @@ public class DefaultServiceRegistry implements ServieRegistry {
     public List<ServiceMetadata> fetchServiceList(String serviceName) {
 
         try {
+            //在没有异常情况下，空结果也是应该缓存的
             List<ServiceMetadata> serviceMetadata = delegate.fetchServiceList(serviceName);
             cache.put(serviceName, serviceMetadata);
             return serviceMetadata;

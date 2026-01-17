@@ -1,7 +1,5 @@
 package com.littlewool.tech.insight.rpc.provider;
 
-import org.checkerframework.checker.units.qual.A;
-
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -19,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class ProviderRegistry {
 
-    private Map<String, Invocation> map = new ConcurrentHashMap<>();
+    private final Map<String, Invocation> map = new ConcurrentHashMap<>();
 
     public <I> void register(Class<I> interfaceClass, I serviceInstance) {
         if(!interfaceClass.isInterface()){
@@ -43,6 +41,7 @@ public class ProviderRegistry {
             this.intefaceClass=interfaceClass;
         }
         public Object invoke(String methodName,Class<?>[] paramsClass,Object[] params) throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+            //使用接口类来进行调用,就不会涉及实现类的私有方法
             Method invokeMethod= intefaceClass.getDeclaredMethod(methodName, paramsClass);
             return invokeMethod.invoke(serviceInstance,params);
         }

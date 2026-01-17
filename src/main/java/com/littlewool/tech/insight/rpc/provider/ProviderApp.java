@@ -14,9 +14,12 @@ import com.littlewool.tech.insight.rpc.register.RegistryConfig;
 public class ProviderApp {
     public static void main(String[] args) {
         RegistryConfig registryConfig =new RegistryConfig();
+
         registryConfig.setRegisterType("zookeeper");
         registryConfig.setConnectString("127.0.0.1:2181");
+
         ProviderProporties providerProporties=new ProviderProporties();
+
         providerProporties.setHost("127.0.0.1");
         providerProporties.setPort(8888);
         providerProporties.setRegistryConfig(registryConfig);

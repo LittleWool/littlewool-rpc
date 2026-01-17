@@ -36,14 +36,13 @@ import java.util.concurrent.TimeoutException;
 
 /**
  * @ClassName: ConsumerProxyFactory
- * @Description:
+ * @Description: 动态代理生成consumer,
  * @Author: LittleWool
  * @Date: 2026/1/13 17:32
  * @Version: 1.0
  **/
 @Slf4j
 public class ConsumerProxyFactory {
-
 
     private final ConnectionManager connectionManager;
 
@@ -57,10 +56,9 @@ public class ConsumerProxyFactory {
 
     private final Fallback fallback;
 
-
     public ConsumerProxyFactory(ConsumerProperties consumerProperties) throws Exception {
-        this.consumerProperties = consumerProperties;
         this.servieRegistry = new DefaultServiceRegistry();
+        this.consumerProperties = consumerProperties;
         this.servieRegistry.init(consumerProperties.getRegistryConfig());
         this.inFlightRequestManager = new InFlightRequestManager(consumerProperties);
         this.circuitBreakerManager = new CircuitBreakerManager(consumerProperties);
@@ -71,41 +69,35 @@ public class ConsumerProxyFactory {
 
     @SuppressWarnings("unchecked")
     public <I> I createConsumerProxy(Class<I> interfaceClass) {
-        return (I) Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(), new Class[]{interfaceClass},
-                new ConsumerInvocationHandler(interfaceClass, createLoadBalancer(), createRetryPolicy()));
+        return (I)Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(), new Class[] {interfaceClass},
+            new ConsumerInvocationHandler(interfaceClass, createLoadBalancer(), createRetryPolicy()));
     }
 
     private RetryPolicy createRetryPolicy() {
-        switch (consumerProperties.getRetryPolicy()) {
-            case "retrySame":
-                return new RetrySame();
-            case "failover":
-                return new FailOverRetryPolicy();
-            case "forking":
-                return new ForkingRetryPolicy();
-        }
-        throw new IllegalArgumentException("没有这个重试策略" + consumerProperties.getRetryPolicy());
+        return switch (consumerProperties.getRetryPolicy()) {
+            case "retrySame" -> new RetrySame();
+            case "failover" -> new FailOverRetryPolicy();
+            case "forking" -> new ForkingRetryPolicy();
+            default -> throw new IllegalArgumentException("没有这个重试策略" + consumerProperties.getRetryPolicy());
+        };
     }
 
     private LoadBalancer createLoadBalancer() {
-        switch (this.consumerProperties.getLoadBalancePolicy()) {
-            case "robin":
-                return new RoundRobinLoadBalancer();
-            case "random":
-                return new RandomLoadBalancer();
-            default:
-                throw new IllegalArgumentException(this.consumerProperties.getLoadBalancePolicy() + "负载均衡不支持");
-        }
+        return switch (this.consumerProperties.getLoadBalancePolicy()) {
+            case "robin" -> new RoundRobinLoadBalancer();
+            case "random" -> new RandomLoadBalancer();
+            default ->
+                    throw new IllegalArgumentException(this.consumerProperties.getLoadBalancePolicy() + "负载均衡不支持");
+        };
     }
 
     private class ConsumerInvocationHandler implements InvocationHandler {
 
-        private Class<?> interfaceClass;
+        private final Class<?>  interfaceClass;
 
         private final LoadBalancer loadBalancer;
 
         private final RetryPolicy retryPolicy;
-
 
         public ConsumerInvocationHandler(Class<?> interfaceClass, LoadBalancer loadBalancer, RetryPolicy retryPolicy) {
             this.interfaceClass = interfaceClass;
@@ -118,38 +110,54 @@ public class ConsumerProxyFactory {
             if (method.getDeclaringClass() == Object.class) {
                 return invokeObjectMethod(proxy, method, args);
             }
-
-            long startTime = System.currentTimeMillis();
+            //注册中心查询服务
             List<ServiceMetadata> serviceMetadata =
-                    new ArrayList<>(servieRegistry.fetchServiceList(interfaceClass.getName()));
+                new ArrayList<>(servieRegistry.fetchServiceList(interfaceClass.getName()));
+            //负载均衡和熔断选择具体的provider
             ServiceMetadata provider = decideProvider(serviceMetadata);
+
+            //本次请求的参数和统计信息
             RpcCallMetrics metrics = RpcCallMetrics.createRpcMetrics(method, args, provider);
             if (null == provider) {
-                //降级
+                // 降级
                 return fallback.fallback(metrics);
             }
+            //构建请求
             Request request = buildRequest(method, args);
 
+            //或者即将请求的provider的熔断器
             CirCuitBreaker breaker = circuitBreakerManager.createOrGetBreaker(provider);
+
             try {
+                //经过消费端限流，放入在途请求。获取对应连接 然后发送请求
                 CompletableFuture<Response> requestFuture = callRpcAsync(request, provider);
                 Response response = requestFuture.get(consumerProperties.getRequestTimeoutMs(), TimeUnit.MILLISECONDS);
                 metrics.doComplete(response);
+
                 breaker.recordRpc(metrics);
                 fallback.recordMetrics(metrics);
+
                 return processResponse(response);
             } catch (Exception e) {
+                //请求发送失败(超时，获取连接失败，限流 会捕获异常进入这里)
+                //先记录本次异常的请求数据
                 metrics.errorComplete(e);
                 breaker.recordRpc(metrics);
             }
             try {
+                //进行重试
                 return processResponse(doRetry(metrics, serviceMetadata));
             } catch (Exception e) {
-                //降级
+                //重试失败则降级
                 return fallback.fallback(metrics);
             }
         }
 
+        /***
+         * 使用负载均衡和熔断选择provider
+         * @param candidate
+         * @return
+         */
         private ServiceMetadata decideProvider(List<ServiceMetadata> candidate) {
             while (!candidate.isEmpty()) {
                 ServiceMetadata select = this.loadBalancer.select(candidate);
@@ -157,6 +165,7 @@ public class ConsumerProxyFactory {
                 if (breaker.allowRequest()) {
                     return select;
                 }
+                //这里直接修改传入列表,减少后续工作量
                 candidate.remove(select);
             }
             return null;
@@ -164,30 +173,36 @@ public class ConsumerProxyFactory {
 
         private Response doRetry(RpcCallMetrics metrics, List<ServiceMetadata> serviceMetadata) throws Exception {
             Throwable e = metrics.getThrowable();
-            if (e instanceof ExecutionException ee && ee.getCause() instanceof RpcException rpcException && !rpcException.retry()) {
+            //completeException异常结束之后,异常会用ExecutionException装着
+            if (e instanceof ExecutionException ee && ee.getCause() instanceof RpcException rpcException
+                && !rpcException.retry()) {
+                //被限流之后是不应该重试的
                 throw rpcException;
             }
-            //重试
+            // 重试
             long timeRemaining = consumerProperties.getMethodTimeoutMs() - metrics.getDuration();
             if (timeRemaining <= 0) {
                 throw new TimeoutException();
             }
             log.warn("rpc出现了异常,进行重试", e);
             RetryContext retryContext = createRetryContextFromFailMetrics(metrics, serviceMetadata, timeRemaining);
-            Response response = this.retryPolicy.retry(retryContext);
-            return response;
+
+            return this.retryPolicy.retry(retryContext);
         }
 
+
         private RetryContext createRetryContextFromFailMetrics(RpcCallMetrics metrics,
-                                                               List<ServiceMetadata> serviceMetadata,
-                                                               long timeRemaining) {
+            List<ServiceMetadata> serviceMetadata, long timeRemaining) {
             RetryContext retryContext = new RetryContext();
+
             retryContext.setFailedService(metrics.getProvider());
             retryContext.setServiceMetadataList(serviceMetadata);
             retryContext.setMethodTimeoutMs(timeRemaining);
             retryContext.setLoadBalancer(this.loadBalancer);
             retryContext.setRequestTimeoutMs(consumerProperties.getRequestTimeoutMs());
-            //需要重新buildrequest
+
+
+            //把重试和 远程调用二者解耦
             retryContext.setDoRpcFunction(provider -> {
                 CirCuitBreaker breaker = circuitBreakerManager.createOrGetBreaker(provider);
                 if (!breaker.allowRequest()) {
@@ -195,10 +210,11 @@ public class ConsumerProxyFactory {
                     breakerFuture.completeExceptionally(new RpcException("provider熔断"));
                     return breakerFuture;
                 }
-                RpcCallMetrics retryMetrics = RpcCallMetrics.createRpcMetrics(metrics.getMethod(),
-                        metrics.getParams(), provider);
-                CompletableFuture<Response> retryFuture = callRpcAsync(buildRequest(metrics.getMethod(),
-                        metrics.getParams()), provider);
+                //统计请求信息
+                RpcCallMetrics retryMetrics =
+                    RpcCallMetrics.createRpcMetrics(metrics.getMethod(), metrics.getParams(), provider);
+                CompletableFuture<Response> retryFuture =
+                    callRpcAsync (buildRequest(metrics.getMethod(), metrics.getParams()), provider);
                 retryFuture.whenComplete((r, retryE) -> {
                     if (null == retryE) {
                         retryMetrics.doComplete(r);
@@ -213,22 +229,29 @@ public class ConsumerProxyFactory {
         }
 
         private CompletableFuture<Response> callRpcAsync(Request request, ServiceMetadata provider) {
-            CompletableFuture<Response> responseFuture = inFlightRequestManager.inFlightRequest(request,
-                    consumerProperties.getRequestTimeoutMs(), provider);
+            //TODO 如果 在在途请求管理器限流 是不是该直接返回,而不是继续访问
+
+            CompletableFuture<Response> responseFuture =
+                inFlightRequestManager.inFlightRequest(request, consumerProperties.getRequestTimeoutMs(), provider);
+            if (responseFuture.isCompletedExceptionally()){
+                return responseFuture;
+            }
+
             Channel channel = connectionManager.getChannel(provider);
 
+
             if (null == channel) {
+                //没有provider直接快速失败
                 responseFuture.completeExceptionally(new RpcException("provider 连接失败"));
                 return responseFuture;
             }
 
-            //先放入，防止调用过快，还未将request放入map4
-
+            // 先放入，防止调用过快，还未将request放入map4
             channel.writeAndFlush(request).addListener(f -> {
                 log.info("发送了request {}", request.getRequestId());
                 if (!f.isSuccess()) {
                     log.info("request {}发送失败", request.getRequestId());
-                    //发送失败直接结束，不再继续等待3秒
+                    // 发送失败直接结束，不再继续等待3秒
                     responseFuture.completeExceptionally(f.cause());
                 }
             });
@@ -253,18 +276,13 @@ public class ConsumerProxyFactory {
         }
 
         private Object invokeObjectMethod(Object proxy, Method method, Object[] args) {
-            if (method.getName().equals("toString")) {
-                return "LittleWool Proxy Consumer " + interfaceClass.getName();
-            }
-            if (method.getName().equals("equals")) {
-                return proxy == args[0];
-            }
-            if (method.getName().equals("hashCOde")) {
-                return System.identityHashCode(proxy);
-            }
-            throw new UnsupportedOperationException("代理对象不支持该函数" + method.getName());
+            return switch (method.getName()) {
+                case "toString" -> "LittleWool Proxy Consumer " + interfaceClass.getName();
+                case "equals" -> proxy == args[0];
+                case "hashCOde" -> System.identityHashCode(proxy);
+                default -> throw new UnsupportedOperationException("代理对象不支持该函数" + method.getName());
+            };
         }
     }
-
 
 }

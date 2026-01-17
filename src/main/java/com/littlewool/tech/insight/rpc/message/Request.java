@@ -13,13 +13,16 @@ import java.util.concurrent.atomic.AtomicInteger;
  **/
 @Data
 public class Request {
-    private static final AtomicInteger REQUEST_INTEGER=new AtomicInteger();
+    private static final AtomicInteger REQUEST_INTEGER = new AtomicInteger();
 
-    private int requestId= REQUEST_INTEGER.getAndIncrement();
+    private int requestId = REQUEST_INTEGER.getAndIncrement();
 
     private String serviceName;
+
     private String methodName;
+
     private Class<?>[] paramClass;
+
     private Object[] params;
 
 }

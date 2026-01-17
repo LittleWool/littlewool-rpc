@@ -25,12 +25,13 @@ public class FailOverRetryPolicy implements RetryPolicy {
         List<ServiceMetadata> serviceMetadataList = new ArrayList<>(retryContext.getServiceMetadataList());
         ServiceMetadata failedService = retryContext.getFailedService();
         serviceMetadataList.remove(failedService);
-        if(serviceMetadataList.isEmpty()){
+        if (serviceMetadataList.isEmpty()) {
             throw new RpcException("没有可重试的Provider");
         }
         ServiceMetadata failOverService = retryContext.getLoadBalancer().select(serviceMetadataList);
         CompletableFuture<Response> future = retryContext.doRpc(failOverService);
 
-        return future.get(Math.min(retryContext.getRequestTimeoutMs(),retryContext.getMethodTimeoutMs()), TimeUnit.MILLISECONDS);
+        return future.get(Math.min(retryContext.getRequestTimeoutMs(), retryContext.getMethodTimeoutMs()),
+            TimeUnit.MILLISECONDS);
     }
 }

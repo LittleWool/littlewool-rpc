@@ -20,7 +20,7 @@ import java.util.List;
  **/
 
 @Slf4j
-public class ZookeeperServiceRegistry implements ServieRegistry {
+public class   ZookeeperServiceRegistry implements ServieRegistry {
     private final String BASE_PATH = "/littlewool/rpc";
     private CuratorFramework client;
     private ServiceDiscovery<ServiceMetadata> discovery;
