@@ -1,7 +1,10 @@
 package com.littlewool.tech.insight.rpc.provider;
 
 import com.littlewool.tech.insight.rpc.codec.LWDecoder;
+import com.littlewool.tech.insight.rpc.codec.LWEncoder;
 import com.littlewool.tech.insight.rpc.codec.ResponseEncoder;
+import com.littlewool.tech.insight.rpc.compress.Compression;
+import com.littlewool.tech.insight.rpc.compress.CompressionManager;
 import com.littlewool.tech.insight.rpc.limit.ConcurrencyLimiter;
 import com.littlewool.tech.insight.rpc.limit.Limiter;
 import com.littlewool.tech.insight.rpc.limit.RateLimiter;
@@ -10,6 +13,8 @@ import com.littlewool.tech.insight.rpc.message.Response;
 import com.littlewool.tech.insight.rpc.register.DefaultServiceRegistry;
 import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
 import com.littlewool.tech.insight.rpc.register.ServieRegistry;
+import com.littlewool.tech.insight.rpc.serializer.Serializer;
+import com.littlewool.tech.insight.rpc.serializer.SerizalizerManager;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -23,6 +28,7 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -50,11 +56,17 @@ public class ProviderServer {
 
     private EventLoopGroup workerEventLoopGroup;
 
+    private final SerizalizerManager serizalizerManager;
+
+    private final CompressionManager compressionManager;
+
     public ProviderServer(ProviderProporties providerProporties) {
         this.providerProporties = providerProporties;
         this.globalLimiter = new ConcurrencyLimiter(providerProporties.getGlobalMaxRequest());
         this.registry = new ProviderRegistry();
         this.servieRegistry = new DefaultServiceRegistry();
+        this.serizalizerManager = new SerizalizerManager();
+        this.compressionManager = new CompressionManager();
     }
 
     public void start() {
@@ -68,7 +80,7 @@ public class ProviderServer {
                 .childHandler(new ChannelInitializer<NioSocketChannel>() {
                     @Override
                     protected void initChannel(NioSocketChannel nioSocketChannel) {
-                        nioSocketChannel.pipeline().addLast(new LWDecoder()).addLast(new ResponseEncoder())
+                        nioSocketChannel.pipeline().addLast(new LWDecoder()).addLast(new LWEncoder())
                             .addLast(new LimitHandler()).addLast(new ProviderHandler());
                     }
                 });
@@ -137,7 +149,7 @@ public class ProviderServer {
                     ctx.channel().attr(CHANNEL_LIMITER_KEY).get().release();
                     globalLimiter.release();
                 }
-                //小于0说明 断开连接释放许可已经触发过了
+                // 小于0说明 断开连接释放许可已经触发过了
             });
             ctx.write(msg, promise);
         }
@@ -164,7 +176,16 @@ public class ProviderServer {
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
             log.info("providerHandler 地址:{}连接了", ctx.channel().remoteAddress());
-            super.channelActive(ctx);
+            Serializer.SerizalizerType serizalizerType =
+                Serializer.SerizalizerType.valueOf(providerProporties.getSerialize().toUpperCase(Locale.ROOT));
+            ctx.channel().attr(LWEncoder.SERIALIZE_KEY).set(serizalizerType.getTypeCode());
+            ctx.channel().attr(LWEncoder.SERIALIZER_MANAGER_KEY).set(serizalizerManager);
+            Compression.CompressionType compressionType =
+                Compression.CompressionType.valueOf(providerProporties.getCompress().toUpperCase(Locale.ROOT));
+
+            ctx.channel().attr(LWEncoder.COMPRESS_KEY).set(compressionType.getTypeCode());
+            ctx.channel().attr(LWEncoder.COMPRESS_MANAGER_KEY).set(compressionManager);
+            ctx.fireChannelActive();
         }
 
         @Override

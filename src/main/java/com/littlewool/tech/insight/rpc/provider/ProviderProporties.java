@@ -17,5 +17,7 @@ public class ProviderProporties {
     private int workThreadNum=4;
     private int globalMaxRequest=1000;
     private int perConsumerMaxRequest=500;
+    private String serialize="json";
+    private String compress="none";
     private RegistryConfig registryConfig;
 }

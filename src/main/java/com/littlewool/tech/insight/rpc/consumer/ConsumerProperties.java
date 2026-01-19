@@ -20,6 +20,8 @@ public class ConsumerProperties {
     private Integer rpcPerChannel=3;
     private String loadBalancePolicy="robin";
     private String retryPolicy="forking";
+    private String serialize="json";
+    private String compress="none";
     private double slowRequestBreakingRatio=0.5;
     private long slowRequestMs=1000L;
     private RegistryConfig registryConfig =new RegistryConfig();

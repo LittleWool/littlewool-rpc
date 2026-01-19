@@ -1,9 +1,14 @@
 package com.littlewool.tech.insight.rpc.consumer;
 
 import com.littlewool.tech.insight.rpc.codec.LWDecoder;
+import com.littlewool.tech.insight.rpc.codec.LWEncoder;
 import com.littlewool.tech.insight.rpc.codec.RequestEncoder;
+import com.littlewool.tech.insight.rpc.compress.Compression;
+import com.littlewool.tech.insight.rpc.compress.CompressionManager;
 import com.littlewool.tech.insight.rpc.message.Response;
 import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
+import com.littlewool.tech.insight.rpc.serializer.Serializer;
+import com.littlewool.tech.insight.rpc.serializer.SerizalizerManager;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -15,6 +20,8 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import lombok.extern.slf4j.Slf4j;
 
+import java.net.PortUnreachableException;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -32,10 +39,16 @@ public class ConnectionManager {
 
     private final Bootstrap bootstrap;
     private final InFlightRequestManager inFlightRequestManager;
+    private final  ConsumerProperties consumerProperties;
+    private final SerizalizerManager serizalizerManager;
+    private final CompressionManager compressionManager;
 
     public ConnectionManager(InFlightRequestManager inFlightRequestManager, ConsumerProperties consumerProperties) {
         this.inFlightRequestManager = inFlightRequestManager;
+        this.consumerProperties=consumerProperties;
         this.bootstrap = createBootstrap(consumerProperties);
+        this.serizalizerManager = new SerizalizerManager();
+        this.compressionManager=new CompressionManager();
     }
 
     public Channel getChannel(ServiceMetadata metadata) {
@@ -84,7 +97,7 @@ public class ConnectionManager {
             .handler(new ChannelInitializer<NioSocketChannel>() {
                 @Override
                 protected void initChannel(NioSocketChannel nioSocketChannel) {
-                    nioSocketChannel.pipeline().addLast(new LWDecoder()).addLast(new RequestEncoder())
+                    nioSocketChannel.pipeline().addLast(new LWDecoder()).addLast(new LWEncoder())
                         .addLast(new ConsumerHandler());
                 }
             });
@@ -99,8 +112,15 @@ public class ConnectionManager {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            //防止重复创建序列化器,读取配置存放需要时用的序列化器和压缩器种类 和管理器
             log.info("地址:{}连接了", ctx.channel().remoteAddress());
-            super.channelActive(ctx);
+            Serializer.SerizalizerType serizalizerType=Serializer.SerizalizerType.valueOf(consumerProperties.getSerialize().toUpperCase(Locale.ROOT));
+            ctx.channel().attr(LWEncoder.SERIALIZE_KEY).set(serizalizerType.getTypeCode());
+            ctx.channel().attr(LWEncoder.SERIALIZER_MANAGER_KEY).set(serizalizerManager);
+            Compression.CompressionType compressionType = Compression.CompressionType.valueOf(consumerProperties.getCompress().toUpperCase(Locale.ROOT));
+            ctx.channel().attr(LWEncoder.COMPRESS_KEY).set(compressionType.getTypeCode());
+            ctx.channel().attr(LWEncoder.COMPRESS_MANAGER_KEY).set(compressionManager);
+            ctx.fireChannelActive();
         }
 
         @Override
@@ -112,7 +132,7 @@ public class ConnectionManager {
         @Override
         public void channelInactive(ChannelHandlerContext ctx) throws Exception {
             log.info("地址:{}断开连接", ctx.channel().remoteAddress());
-            super.channelInactive(ctx);
+           ctx.fireChannelInactive();
         }
     }
 
