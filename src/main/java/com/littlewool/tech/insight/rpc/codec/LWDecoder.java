@@ -23,11 +23,9 @@ import java.util.Objects;
 
 public class LWDecoder extends LengthFieldBasedFrameDecoder {
 
-    public static final AttributeKey<Integer> SERIALIZE_KEY = AttributeKey.valueOf("serializeKey");
+
     public static final AttributeKey<SerizalizerManager> SERIALIZER_MANAGER_KEY =
         AttributeKey.valueOf("serializeManagerKey");
-
-    public static final AttributeKey<Integer> COMPRESS_KEY = AttributeKey.valueOf("compresKey");
     public static final AttributeKey<CompressionManager> COMPRESS_MANAGER_KEY =
         AttributeKey.valueOf("compressManagerKey");
 

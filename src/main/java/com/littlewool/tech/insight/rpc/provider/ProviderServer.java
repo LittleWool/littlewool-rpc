@@ -1,10 +1,11 @@
 package com.littlewool.tech.insight.rpc.provider;
 
+import com.littlewool.tech.insight.rpc.handler.HeartbeatHandler;
 import com.littlewool.tech.insight.rpc.codec.LWDecoder;
 import com.littlewool.tech.insight.rpc.codec.LWEncoder;
-import com.littlewool.tech.insight.rpc.codec.ResponseEncoder;
 import com.littlewool.tech.insight.rpc.compress.Compression;
 import com.littlewool.tech.insight.rpc.compress.CompressionManager;
+import com.littlewool.tech.insight.rpc.handler.TrafficRecordHandler;
 import com.littlewool.tech.insight.rpc.limit.ConcurrencyLimiter;
 import com.littlewool.tech.insight.rpc.limit.Limiter;
 import com.littlewool.tech.insight.rpc.limit.RateLimiter;
@@ -25,10 +26,12 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -80,7 +83,11 @@ public class ProviderServer {
                 .childHandler(new ChannelInitializer<NioSocketChannel>() {
                     @Override
                     protected void initChannel(NioSocketChannel nioSocketChannel) {
-                        nioSocketChannel.pipeline().addLast(new LWDecoder()).addLast(new LWEncoder())
+                        nioSocketChannel.pipeline()
+                                .addLast(new TrafficRecordHandler())
+                                .addLast(new LWDecoder()).addLast(new LWEncoder())
+                                .addLast(new IdleStateHandler(30,5,0, TimeUnit.SECONDS))
+                                .addLast(new HeartbeatHandler())
                             .addLast(new LimitHandler()).addLast(new ProviderHandler());
                     }
                 });
@@ -169,6 +176,7 @@ public class ProviderServer {
             ctx.channel().attr(GLOBAL_PERMITS).set(new AtomicInteger(0));
             ctx.fireChannelActive();
         }
+
     }
 
     public class ProviderHandler extends SimpleChannelInboundHandler<Request> {
@@ -176,6 +184,7 @@ public class ProviderServer {
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
             log.info("providerHandler 地址:{}连接了", ctx.channel().remoteAddress());
+            //这里放置的是配置文件里的序列化和压缩
             Serializer.SerizalizerType serizalizerType =
                 Serializer.SerizalizerType.valueOf(providerProporties.getSerialize().toUpperCase(Locale.ROOT));
             ctx.channel().attr(LWEncoder.SERIALIZE_KEY).set(serizalizerType.getTypeCode());

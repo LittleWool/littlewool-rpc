@@ -2,6 +2,8 @@ package com.littlewool.tech.insight.rpc.message;
 
 import lombok.Data;
 
+import java.io.Serializable;
+
 /**
  * @ClassName: Response
  * @Description:
@@ -10,7 +12,7 @@ import lombok.Data;
  * @Version: 1.0
  **/
 @Data
-public class Response {
+public class Response implements Serializable {
 
     Object result;
 

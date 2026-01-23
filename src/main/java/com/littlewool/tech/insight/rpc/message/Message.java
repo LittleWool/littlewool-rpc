@@ -34,7 +34,11 @@ public class Message {
 
     public enum MessageType {
 
-        REQUEST(1, Request.class), RESPONSE(2, Response.class);
+        REQUEST(1, Request.class),
+        RESPONSE(2, Response.class),
+        HEARTBEAT_REQUEST(3,HeartbeatRequest.class),
+        HEARTBEAT_RESPONSE(4,HeartbeatResponse.class)
+        ;
 
         public byte getCode() {
             return code;

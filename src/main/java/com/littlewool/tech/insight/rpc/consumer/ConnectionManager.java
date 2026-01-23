@@ -1,10 +1,11 @@
 package com.littlewool.tech.insight.rpc.consumer;
 
+import com.littlewool.tech.insight.rpc.handler.HeartbeatHandler;
 import com.littlewool.tech.insight.rpc.codec.LWDecoder;
 import com.littlewool.tech.insight.rpc.codec.LWEncoder;
-import com.littlewool.tech.insight.rpc.codec.RequestEncoder;
 import com.littlewool.tech.insight.rpc.compress.Compression;
 import com.littlewool.tech.insight.rpc.compress.CompressionManager;
+import com.littlewool.tech.insight.rpc.handler.TrafficRecordHandler;
 import com.littlewool.tech.insight.rpc.message.Response;
 import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
 import com.littlewool.tech.insight.rpc.serializer.Serializer;
@@ -18,12 +19,13 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.timeout.IdleStateHandler;
 import lombok.extern.slf4j.Slf4j;
 
-import java.net.PortUnreachableException;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @ClassName: ConnectionManager
@@ -97,7 +99,11 @@ public class ConnectionManager {
             .handler(new ChannelInitializer<NioSocketChannel>() {
                 @Override
                 protected void initChannel(NioSocketChannel nioSocketChannel) {
-                    nioSocketChannel.pipeline().addLast(new LWDecoder()).addLast(new LWEncoder())
+                    nioSocketChannel.pipeline()
+                            .addLast(new TrafficRecordHandler())
+                            .addLast(new LWDecoder()).addLast(new LWEncoder())
+                            .addLast(new IdleStateHandler(30,5,0, TimeUnit.SECONDS))
+                            .addLast(new HeartbeatHandler())
                         .addLast(new ConsumerHandler());
                 }
             });
@@ -112,11 +118,13 @@ public class ConnectionManager {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            //这里放置的是配置文件里的序列化和压缩
             //防止重复创建序列化器,读取配置存放需要时用的序列化器和压缩器种类 和管理器
             log.info("地址:{}连接了", ctx.channel().remoteAddress());
             Serializer.SerizalizerType serizalizerType=Serializer.SerizalizerType.valueOf(consumerProperties.getSerialize().toUpperCase(Locale.ROOT));
             ctx.channel().attr(LWEncoder.SERIALIZE_KEY).set(serizalizerType.getTypeCode());
             ctx.channel().attr(LWEncoder.SERIALIZER_MANAGER_KEY).set(serizalizerManager);
+
             Compression.CompressionType compressionType = Compression.CompressionType.valueOf(consumerProperties.getCompress().toUpperCase(Locale.ROOT));
             ctx.channel().attr(LWEncoder.COMPRESS_KEY).set(compressionType.getTypeCode());
             ctx.channel().attr(LWEncoder.COMPRESS_MANAGER_KEY).set(compressionManager);

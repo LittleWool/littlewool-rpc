@@ -2,6 +2,7 @@ package com.littlewool.tech.insight.rpc.message;
 
 import lombok.Data;
 
+import java.io.Serializable;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -12,7 +13,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @Version: 1.0
  **/
 @Data
-public class Request {
+public class Request  implements Serializable {
     private static final AtomicInteger REQUEST_INTEGER = new AtomicInteger();
 
     private int requestId = REQUEST_INTEGER.getAndIncrement();

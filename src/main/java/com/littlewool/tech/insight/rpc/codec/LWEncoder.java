@@ -47,7 +47,9 @@ public class LWEncoder extends MessageToByteEncoder<Object> {
         Version current = Version.V1;
 
         byte[] body = defaultSerializer.serialize(msg);
+        //默认的就是消费者配置文件里的压缩 序列化器
         byte finalSac=defaultSerializeAndCompressCode;
+        //消息过小时就不必压缩，反而会增大消息
         if (body.length<256){
              finalSac &=(byte) 0b11110000l;
         }else {
