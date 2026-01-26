@@ -21,6 +21,7 @@ import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -31,6 +32,9 @@ import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Locale;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -63,6 +67,9 @@ public class ProviderServer {
 
     private final CompressionManager compressionManager;
 
+    //解放EventLoopGroup
+    private ThreadPoolExecutor invokeExecutor;
+
     public ProviderServer(ProviderProporties providerProporties) {
         this.providerProporties = providerProporties;
         this.globalLimiter = new ConcurrencyLimiter(providerProporties.getGlobalMaxRequest());
@@ -70,6 +77,7 @@ public class ProviderServer {
         this.servieRegistry = new DefaultServiceRegistry();
         this.serizalizerManager = new SerizalizerManager();
         this.compressionManager = new CompressionManager();
+        this.invokeExecutor=new ThreadPoolExecutor(4,4,10,TimeUnit.SECONDS,new ArrayBlockingQueue<>(1024),new FastFailResponseHandler());
     }
 
     public void start() {
@@ -178,6 +186,46 @@ public class ProviderServer {
         }
 
     }
+    private class FastFailResponseHandler implements RejectedExecutionHandler{
+
+        @Override
+        public void rejectedExecution(Runnable task, ThreadPoolExecutor executor) {
+            if(task instanceof InvokeTask invokeTask ){
+                Response response = Response.fail("服务器繁忙", invokeTask.request.getRequestId());
+                invokeTask.ctx.writeAndFlush(response);
+                return;
+            }
+            throw new RuntimeException("任务不是InvokeTask,有问题");
+        }
+    }
+
+    private class InvokeTask implements Runnable{
+
+        private Request request;
+        private ChannelHandlerContext ctx;
+        private  ProviderRegistry.Invocation<?> invocation;
+        public InvokeTask(Request request, ChannelHandlerContext ctx, ProviderRegistry.Invocation<?> invocation) {
+            this.request=request;
+            this.ctx=ctx;
+            this.invocation=invocation;
+        }
+
+        @Override
+        public void run() {
+            EventLoop eventLoop = ctx.channel().eventLoop();
+            try {
+                long startTime = System.currentTimeMillis();
+                Object result =
+                        invocation.invoke(request.getMethodName(), request.getParamClass(), request.getParams());
+                log.info("requestId{},{}函数被调用了{},结果是{},耗时是{},时间是{}", request.getRequestId(), request.getServiceName(),
+                        request.getMethodName(), request, System.currentTimeMillis() - startTime,System.currentTimeMillis());
+
+                eventLoop.execute(()->ctx.writeAndFlush(Response.success(result, request.getRequestId())));
+            } catch (Exception e) {
+                eventLoop.execute(()->ctx.writeAndFlush(Response.fail(e.getMessage(), request.getRequestId())));
+            }
+        }
+    }
 
     public class ProviderHandler extends SimpleChannelInboundHandler<Request> {
 
@@ -210,26 +258,15 @@ public class ProviderServer {
         }
 
         @Override
-        protected void channelRead0(ChannelHandlerContext channelHandlerContext, Request request) {
+        protected void channelRead0(ChannelHandlerContext ctx, Request request) {
             ProviderRegistry.Invocation<?> invocation = registry.findService(request.getServiceName());
             if (null == invocation) {
                 Response fail =
                     Response.fail(String.format("%s 没有对应的处理服务", request.getServiceName()), request.getRequestId());
-                channelHandlerContext.writeAndFlush(fail);
+                ctx.writeAndFlush(fail);
                 return;
             }
-
-            try {
-                long startTime = System.currentTimeMillis();
-                Object result =
-                    invocation.invoke(request.getMethodName(), request.getParamClass(), request.getParams());
-                log.info("requestId{},{}函数被调用了{},结果是{},耗时是{}", request.getRequestId(), request.getServiceName(),
-                    request.getMethodName(), request, System.currentTimeMillis() - startTime);
-                channelHandlerContext.writeAndFlush(Response.success(result, request.getRequestId()));
-            } catch (Exception e) {
-                channelHandlerContext.writeAndFlush(Response.fail(e.getMessage(), request.getRequestId()));
-            }
-
+            invokeExecutor.execute(new InvokeTask(request,ctx,invocation));
         }
     }
 

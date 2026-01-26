@@ -115,6 +115,7 @@ public class ConsumerProxyFactory {
                 new ArrayList<>(servieRegistry.fetchServiceList(interfaceClass.getName()));
             //负载均衡和熔断选择具体的provider
             ServiceMetadata provider = decideProvider(serviceMetadata);
+            System.out.println("发送请求前"+System.currentTimeMillis());
 
             //本次请求的参数和统计信息
             RpcCallMetrics metrics = RpcCallMetrics.createRpcMetrics(method, args, provider);
@@ -122,6 +123,7 @@ public class ConsumerProxyFactory {
                 // 降级
                 return fallback.fallback(metrics);
             }
+
             //构建请求
             Request request = buildRequest(method, args);
 
@@ -130,13 +132,15 @@ public class ConsumerProxyFactory {
 
             try {
                 //经过消费端限流，放入在途请求。获取对应连接 然后发送请求
-                CompletableFuture<Response> requestFuture = callRpcAsync(request, provider);
-                Response response = requestFuture.get(consumerProperties.getRequestTimeoutMs(), TimeUnit.MILLISECONDS);
-                metrics.doComplete(response);
+                System.out.println("发送请求前"+System.currentTimeMillis());
 
+                CompletableFuture<Response> requestFuture = callRpcAsync(request, provider);
+                System.out.println("发送请求后"+System.currentTimeMillis());
+                Response response = requestFuture.get(consumerProperties.getRequestTimeoutMs(), TimeUnit.MILLISECONDS);
+                System.out.println("响应后"+System.currentTimeMillis());
+                metrics.doComplete(response);
                 breaker.recordRpc(metrics);
                 fallback.recordMetrics(metrics);
-
                 return processResponse(response);
             } catch (Exception e) {
                 //请求发送失败(超时，获取连接失败，限流 会捕获异常进入这里)

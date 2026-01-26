@@ -4,6 +4,9 @@ import com.littlewool.tech.insight.rpc.api.Add;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
+
 /**
  * @ClassName: AddImpl
  * @Description:
@@ -16,7 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 public class AddImpl implements Add {
     @Override
     public int add(int a, int b) {
-//        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(1500));
+//        LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
         return a + b;
     }
 
