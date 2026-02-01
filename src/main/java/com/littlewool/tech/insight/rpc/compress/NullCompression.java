@@ -18,4 +18,14 @@ public class NullCompression implements Compression{
     public byte[] decompress(byte[] bytes) {
         return bytes;
     }
+
+    @Override
+    public String getName() {
+        return "null";
+    }
+
+    @Override
+    public int code() {
+        return 0;
+    }
 }

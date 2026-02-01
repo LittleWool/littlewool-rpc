@@ -3,6 +3,7 @@ package com.littlewool.tech.insight.rpc.retry;
 import com.littlewool.tech.insight.rpc.exception.RpcException;
 import com.littlewool.tech.insight.rpc.message.Response;
 import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
+import com.littlewool.tech.insight.rpc.spi.Spi;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ import java.util.concurrent.TimeUnit;
  **/
 
 @Slf4j
+@Spi("failover")
 public class FailOverRetryPolicy implements RetryPolicy {
     @Override
     public Response retry(RetryContext retryContext) throws Exception {

@@ -42,4 +42,14 @@ public class GzipCompression implements Compression {
             throw new RpcException("消息解压缩失败",e);
         }
     }
+
+    @Override
+    public String getName() {
+        return "gzip";
+    }
+
+    @Override
+    public int code() {
+        return 1;
+    }
 }

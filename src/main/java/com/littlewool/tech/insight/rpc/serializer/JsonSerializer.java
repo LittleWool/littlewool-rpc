@@ -24,4 +24,14 @@ public class JsonSerializer implements Serializer{
         String jsonString=new String(bytes,StandardCharsets.UTF_8);
         return JSONObject.parseObject(jsonString,objectClass ,JSONReader.Feature.SupportClassForName);
     }
+
+    @Override
+    public String getName() {
+        return "json";
+    }
+
+    @Override
+    public int code() {
+        return 0;
+    }
 }

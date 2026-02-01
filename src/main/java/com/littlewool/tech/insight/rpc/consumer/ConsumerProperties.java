@@ -21,7 +21,7 @@ public class ConsumerProperties {
     private String loadBalancePolicy="robin";
     private String retryPolicy="forking";
     private String serialize="json";
-    private String compress="none";
+    private String compress="null";
     private double slowRequestBreakingRatio=0.5;
     private long slowRequestMs=1000L;
     private RegistryConfig registryConfig =new RegistryConfig();

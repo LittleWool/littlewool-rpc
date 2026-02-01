@@ -121,12 +121,12 @@ public class ConnectionManager {
             //这里放置的是配置文件里的序列化和压缩
             //防止重复创建序列化器,读取配置存放需要时用的序列化器和压缩器种类 和管理器
             log.info("地址:{}连接了", ctx.channel().remoteAddress());
-            Serializer.SerizalizerType serizalizerType=Serializer.SerizalizerType.valueOf(consumerProperties.getSerialize().toUpperCase(Locale.ROOT));
-            ctx.channel().attr(LWEncoder.SERIALIZE_KEY).set(serizalizerType.getTypeCode());
+            Serializer serializer = serizalizerManager.getSerializer(consumerProperties.getSerialize());
+            ctx.channel().attr(LWEncoder.SERIALIZE_KEY).set(serializer.getName());
             ctx.channel().attr(LWEncoder.SERIALIZER_MANAGER_KEY).set(serizalizerManager);
 
-            Compression.CompressionType compressionType = Compression.CompressionType.valueOf(consumerProperties.getCompress().toUpperCase(Locale.ROOT));
-            ctx.channel().attr(LWEncoder.COMPRESS_KEY).set(compressionType.getTypeCode());
+            Compression compression = compressionManager.getCompression(consumerProperties.getCompress());
+            ctx.channel().attr(LWEncoder.COMPRESS_KEY).set(compression.getName());
             ctx.channel().attr(LWEncoder.COMPRESS_MANAGER_KEY).set(compressionManager);
             ctx.fireChannelActive();
         }

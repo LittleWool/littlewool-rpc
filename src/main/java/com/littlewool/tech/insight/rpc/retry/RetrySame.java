@@ -2,6 +2,7 @@ package com.littlewool.tech.insight.rpc.retry;
 
 import com.littlewool.tech.insight.rpc.exception.RpcException;
 import com.littlewool.tech.insight.rpc.message.Response;
+import com.littlewool.tech.insight.rpc.spi.Spi;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Random;
@@ -18,6 +19,7 @@ import java.util.concurrent.TimeoutException;
  **/
 
 @Slf4j
+@Spi("retrySame")
 public class RetrySame implements RetryPolicy{
     final int retryMax=3;
     private final Random random=new Random();

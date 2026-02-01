@@ -1,0 +1,2 @@
+com.littlewool.tech.insight.rpc.serializer.JsonSerializer
+com.littlewool.tech.insight.rpc.serializer.HessianSerializer

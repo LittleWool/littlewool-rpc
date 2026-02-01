@@ -8,7 +8,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 
 /**
- * @ClassName: HessonSerializer
+ * @ClassName: HessianSerializer
  * @Description:
  * @Author: LittleWool
  * @Date: 2026/1/19 9:09
@@ -16,7 +16,7 @@ import java.io.ByteArrayOutputStream;
  **/
 
 @Slf4j
-public class HessonSerializer implements Serializer{
+public class HessianSerializer implements Serializer{
     @Override
     public byte[] serialize(Object object) {
         try (ByteArrayOutputStream oos=new ByteArrayOutputStream()){
@@ -39,5 +39,15 @@ public class HessonSerializer implements Serializer{
             log.error("Hessian 反序列化失败{}",objectClass.getClass().getName(),e);
             return null;
         }
+    }
+
+    @Override
+    public String getName() {
+        return "hessian";
+    }
+
+    @Override
+    public int code() {
+        return 1;
     }
 }

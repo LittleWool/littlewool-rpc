@@ -1,0 +1,2 @@
+com.littlewool.tech.insight.rpc.retry.FailOverRetryPolicy
+com.littlewool.tech.insight.rpc.retry.ForkingRetryPolicy

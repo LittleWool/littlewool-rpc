@@ -3,6 +3,7 @@ package com.littlewool.tech.insight.rpc.retry;
 import com.littlewool.tech.insight.rpc.exception.RpcException;
 import com.littlewool.tech.insight.rpc.message.Response;
 import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
+import com.littlewool.tech.insight.rpc.spi.Spi;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,7 +17,7 @@ import java.util.concurrent.TimeUnit;
  * @Date: 2026/1/14 19:26
  * @Version: 1.0
  **/
-
+@Spi("forking")
 public class ForkingRetryPolicy implements RetryPolicy{
     @Override
     public Response retry(RetryContext retryContext) throws Exception {

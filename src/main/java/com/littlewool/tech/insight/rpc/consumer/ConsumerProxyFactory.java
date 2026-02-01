@@ -20,6 +20,7 @@ import com.littlewool.tech.insight.rpc.retry.FailOverRetryPolicy;
 import com.littlewool.tech.insight.rpc.retry.ForkingRetryPolicy;
 import com.littlewool.tech.insight.rpc.retry.RetryContext;
 import com.littlewool.tech.insight.rpc.retry.RetryPolicy;
+import com.littlewool.tech.insight.rpc.retry.RetryPolicyManager;
 import com.littlewool.tech.insight.rpc.retry.RetrySame;
 import io.netty.channel.Channel;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +57,8 @@ public class ConsumerProxyFactory {
 
     private final Fallback fallback;
 
+    private final RetryPolicyManager retryPolicyManager;
+
     public ConsumerProxyFactory(ConsumerProperties consumerProperties) throws Exception {
         this.servieRegistry = new DefaultServiceRegistry();
         this.consumerProperties = consumerProperties;
@@ -63,23 +66,22 @@ public class ConsumerProxyFactory {
         this.inFlightRequestManager = new InFlightRequestManager(consumerProperties);
         this.circuitBreakerManager = new CircuitBreakerManager(consumerProperties);
         this.fallback = new DefaultFallBack(new CacheFallback(), new MockFallback());
-
+        this.retryPolicyManager=new RetryPolicyManager();
         connectionManager = new ConnectionManager(inFlightRequestManager, consumerProperties);
     }
 
     @SuppressWarnings("unchecked")
     public <I> I createConsumerProxy(Class<I> interfaceClass) {
         return (I)Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(), new Class[] {interfaceClass},
-            new ConsumerInvocationHandler(interfaceClass, createLoadBalancer(), createRetryPolicy()));
+            new ConsumerInvocationHandler(interfaceClass, createLoadBalancer(), createRetryPolicy(consumerProperties.getRetryPolicy())));
     }
 
-    private RetryPolicy createRetryPolicy() {
-        return switch (consumerProperties.getRetryPolicy()) {
-            case "retrySame" -> new RetrySame();
-            case "failover" -> new FailOverRetryPolicy();
-            case "forking" -> new ForkingRetryPolicy();
-            default -> throw new IllegalArgumentException("没有这个重试策略" + consumerProperties.getRetryPolicy());
-        };
+    private RetryPolicy createRetryPolicy(String retryPolicyName) {
+        RetryPolicy retryPolicy = retryPolicyManager.getRetryPolicy(retryPolicyName);
+        if(null==retryPolicy){
+            throw new IllegalArgumentException("没有对应的重试策略"+retryPolicyName);
+        }
+        return retryPolicy;
     }
 
     private LoadBalancer createLoadBalancer() {

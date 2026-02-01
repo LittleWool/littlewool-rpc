@@ -23,11 +23,11 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class LWEncoder extends MessageToByteEncoder<Object> {
-    public static final AttributeKey<Integer> SERIALIZE_KEY = AttributeKey.valueOf("serializeKey");
+    public static final AttributeKey<String> SERIALIZE_KEY = AttributeKey.valueOf("serializeKey");
     public static final AttributeKey<SerizalizerManager> SERIALIZER_MANAGER_KEY =
         AttributeKey.valueOf("serializeManagerKey");
 
-    public static final AttributeKey<Integer> COMPRESS_KEY = AttributeKey.valueOf("compresKey");
+    public static final AttributeKey<String> COMPRESS_KEY = AttributeKey.valueOf("compresKey");
     public static final AttributeKey<CompressionManager> COMPRESS_MANAGER_KEY =
         AttributeKey.valueOf("compressManagerKey");
 
@@ -72,13 +72,13 @@ public class LWEncoder extends MessageToByteEncoder<Object> {
     }
 
     private void initIfNecessary(ChannelHandlerContext ctx) {
-        Integer serializeCode = ctx.channel().attr(SERIALIZE_KEY).get();
+        String serializeKey = ctx.channel().attr(SERIALIZE_KEY).get();
         SerizalizerManager serizalizerManager = ctx.channel().attr(SERIALIZER_MANAGER_KEY).get();
-        defaultSerializer=serizalizerManager.getSerializer(serializeCode);
+        defaultSerializer=serizalizerManager.getSerializer(serializeKey);
 
-        Integer compressCode = ctx.channel().attr(COMPRESS_KEY).get();
+        String compressKey = ctx.channel().attr(COMPRESS_KEY).get();
         CompressionManager compressionManager = ctx.channel().attr(COMPRESS_MANAGER_KEY).get();
-        defaultCompression=compressionManager.getCompression(compressCode);
+        defaultCompression=compressionManager.getCompression(compressKey);
         if (null == defaultSerializer) {
             throw new IllegalArgumentException("不存在默认的序列化器");
         }
@@ -86,6 +86,6 @@ public class LWEncoder extends MessageToByteEncoder<Object> {
         if (null == defaultCompression) {
             throw new IllegalArgumentException("不存在默认的压缩器");
         }
-        defaultSerializeAndCompressCode=(byte)((serializeCode << 4) | compressCode);
+        defaultSerializeAndCompressCode=(byte)((defaultSerializer.code() << 4) | defaultCompression.code());
     }
 }

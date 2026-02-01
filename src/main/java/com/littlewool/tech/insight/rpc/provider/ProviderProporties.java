@@ -18,6 +18,6 @@ public class ProviderProporties {
     private int globalMaxRequest=100;
     private int perConsumerMaxRequest=50;
     private String serialize="json";
-    private String compress="none";
+    private String compress="null";
     private RegistryConfig registryConfig;
 }

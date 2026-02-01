@@ -1,7 +1,10 @@
 package com.littlewool.tech.insight.rpc.compress;
 
+import com.littlewool.tech.insight.rpc.serializer.Serializer;
+
 import java.util.HashMap;
 import java.util.Map;
+import java.util.ServiceLoader;
 
 /**
  * @ClassName: CompressManager
@@ -12,16 +15,31 @@ import java.util.Map;
  **/
 
 public class CompressionManager {
-    private Map<Integer, Compression> compressionMap=new HashMap<>();
+    private Map<Integer, Compression> codeMap =new HashMap<>();
+    private Map<String, Compression> nameMap =new HashMap<>();
 
     public CompressionManager() {
         init();
     }
     public Compression getCompression(int typeCode){
-        return compressionMap.get(typeCode);
+        return codeMap.get(typeCode);
+    }
+
+    public Compression getCompression(String name) {
+        return nameMap.get(name.toUpperCase());
     }
     private void init(){
-        compressionMap.put(Compression.CompressionType.NONE.getTypeCode(), new NullCompression());
-        compressionMap.put(Compression.CompressionType.GZIP.getTypeCode(), new GzipCompression());
+        ServiceLoader<Compression> compressions = ServiceLoader.load(Compression.class);
+        for (Compression compression : compressions) {
+            if (compression.code() >= 16) {
+                throw new IllegalArgumentException("输入的压缩器编码不能超过15");
+            }
+            if (null!=codeMap.put(compression.code(), compression)) {
+                throw new IllegalArgumentException("压缩器code重复");
+            }
+            if (null!=nameMap.put(compression.getName().toUpperCase(), compression)){
+                throw new IllegalArgumentException("压缩器名称重复");
+            }
+        }
     }
 }

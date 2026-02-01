@@ -1,5 +1,7 @@
 package com.littlewool.tech.insight.rpc.compress;
 
+import com.littlewool.tech.insight.rpc.spi.Extension;
+
 /**
  * @ClassName: Compression
  * @Description:
@@ -8,7 +10,7 @@ package com.littlewool.tech.insight.rpc.compress;
  * @Version: 1.0
  **/
 
-public interface Compression {
+public interface Compression extends Extension {
     byte[] compress(byte[] bytes);
 
     byte[] decompress(byte[] bytes);

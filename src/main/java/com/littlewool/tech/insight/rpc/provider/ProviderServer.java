@@ -233,14 +233,12 @@ public class ProviderServer {
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
             log.info("providerHandler 地址:{}连接了", ctx.channel().remoteAddress());
             //这里放置的是配置文件里的序列化和压缩
-            Serializer.SerizalizerType serizalizerType =
-                Serializer.SerizalizerType.valueOf(providerProporties.getSerialize().toUpperCase(Locale.ROOT));
-            ctx.channel().attr(LWEncoder.SERIALIZE_KEY).set(serizalizerType.getTypeCode());
+            Serializer serializer = serizalizerManager.getSerializer(providerProporties.getSerialize());
+            ctx.channel().attr(LWEncoder.SERIALIZE_KEY).set(serializer.getName());
             ctx.channel().attr(LWEncoder.SERIALIZER_MANAGER_KEY).set(serizalizerManager);
-            Compression.CompressionType compressionType =
-                Compression.CompressionType.valueOf(providerProporties.getCompress().toUpperCase(Locale.ROOT));
+            Compression compression = compressionManager.getCompression(providerProporties.getCompress());
 
-            ctx.channel().attr(LWEncoder.COMPRESS_KEY).set(compressionType.getTypeCode());
+            ctx.channel().attr(LWEncoder.COMPRESS_KEY).set(compression.getName());
             ctx.channel().attr(LWEncoder.COMPRESS_MANAGER_KEY).set(compressionManager);
             ctx.fireChannelActive();
         }
