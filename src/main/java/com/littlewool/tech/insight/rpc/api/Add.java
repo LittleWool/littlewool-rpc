@@ -15,4 +15,6 @@ public interface Add{
     public int add(int a,int b);
 
     public int minus(int a,int b);
+
+    public User mergeAge(User user1,User user2);
 }

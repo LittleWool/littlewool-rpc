@@ -29,6 +29,7 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -66,20 +67,21 @@ public class ConsumerProxyFactory {
         this.inFlightRequestManager = new InFlightRequestManager(consumerProperties);
         this.circuitBreakerManager = new CircuitBreakerManager(consumerProperties);
         this.fallback = new DefaultFallBack(new CacheFallback(), new MockFallback());
-        this.retryPolicyManager=new RetryPolicyManager();
+        this.retryPolicyManager = new RetryPolicyManager();
         connectionManager = new ConnectionManager(inFlightRequestManager, consumerProperties);
     }
 
     @SuppressWarnings("unchecked")
     public <I> I createConsumerProxy(Class<I> interfaceClass) {
         return (I)Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(), new Class[] {interfaceClass},
-            new ConsumerInvocationHandler(interfaceClass, createLoadBalancer(), createRetryPolicy(consumerProperties.getRetryPolicy())));
+            new ConsumerInvocationHandler(interfaceClass, createLoadBalancer(),
+                createRetryPolicy(consumerProperties.getRetryPolicy())));
     }
 
     private RetryPolicy createRetryPolicy(String retryPolicyName) {
         RetryPolicy retryPolicy = retryPolicyManager.getRetryPolicy(retryPolicyName);
-        if(null==retryPolicy){
-            throw new IllegalArgumentException("没有对应的重试策略"+retryPolicyName);
+        if (null == retryPolicy) {
+            throw new IllegalArgumentException("没有对应的重试策略" + retryPolicyName);
         }
         return retryPolicy;
     }
@@ -88,14 +90,13 @@ public class ConsumerProxyFactory {
         return switch (this.consumerProperties.getLoadBalancePolicy()) {
             case "robin" -> new RoundRobinLoadBalancer();
             case "random" -> new RandomLoadBalancer();
-            default ->
-                    throw new IllegalArgumentException(this.consumerProperties.getLoadBalancePolicy() + "负载均衡不支持");
+            default -> throw new IllegalArgumentException(this.consumerProperties.getLoadBalancePolicy() + "负载均衡不支持");
         };
     }
 
     private class ConsumerInvocationHandler implements InvocationHandler {
 
-        private final Class<?>  interfaceClass;
+        private final Class<?> interfaceClass;
 
         private final LoadBalancer loadBalancer;
 
@@ -112,55 +113,57 @@ public class ConsumerProxyFactory {
             if (method.getDeclaringClass() == Object.class) {
                 return invokeObjectMethod(proxy, method, args);
             }
-            //注册中心查询服务
-            List<ServiceMetadata> serviceMetadata =
-                new ArrayList<>(servieRegistry.fetchServiceList(interfaceClass.getName()));
-            //负载均衡和熔断选择具体的provider
+            boolean genericInvoke = method.getName().equals("$invoke");
+            String serviceName = genericInvoke ? args[0].toString() : interfaceClass.getName();
+            // 注册中心查询服务
+            List<ServiceMetadata> serviceMetadata = new ArrayList<>(servieRegistry.fetchServiceList(serviceName));
+            // 负载均衡和熔断选择具体的provider
             ServiceMetadata provider = decideProvider(serviceMetadata);
-            System.out.println("发送请求前"+System.currentTimeMillis());
+            System.out.println("发送请求前" + System.currentTimeMillis());
 
-            //本次请求的参数和统计信息
+            // 本次请求的参数和统计信息
             RpcCallMetrics metrics = RpcCallMetrics.createRpcMetrics(method, args, provider);
             if (null == provider) {
                 // 降级
                 return fallback.fallback(metrics);
             }
 
-            //构建请求
+            // 构建请求
             Request request = buildRequest(method, args);
 
-            //或者即将请求的provider的熔断器
+            // 或者即将请求的provider的熔断器
             CirCuitBreaker breaker = circuitBreakerManager.createOrGetBreaker(provider);
 
             try {
-                //经过消费端限流，放入在途请求。获取对应连接 然后发送请求
-                System.out.println("发送请求前"+System.currentTimeMillis());
+                // 经过消费端限流，放入在途请求。获取对应连接 然后发送请求
+                System.out.println("发送请求前" + System.currentTimeMillis());
 
                 CompletableFuture<Response> requestFuture = callRpcAsync(request, provider);
-                System.out.println("发送请求后"+System.currentTimeMillis());
+                System.out.println("发送请求后" + System.currentTimeMillis());
                 Response response = requestFuture.get(consumerProperties.getRequestTimeoutMs(), TimeUnit.MILLISECONDS);
-                System.out.println("响应后"+System.currentTimeMillis());
+                System.out.println("响应后" + System.currentTimeMillis());
                 metrics.doComplete(response);
                 breaker.recordRpc(metrics);
                 fallback.recordMetrics(metrics);
                 return processResponse(response);
             } catch (Exception e) {
-                //请求发送失败(超时，获取连接失败，限流 会捕获异常进入这里)
-                //先记录本次异常的请求数据
+                // 请求发送失败(超时，获取连接失败，限流 会捕获异常进入这里)
+                // 先记录本次异常的请求数据
                 metrics.errorComplete(e);
                 breaker.recordRpc(metrics);
             }
             try {
-                //进行重试
+                // 进行重试
                 return processResponse(doRetry(metrics, serviceMetadata));
             } catch (Exception e) {
-                //重试失败则降级
+                // 重试失败则降级
                 return fallback.fallback(metrics);
             }
         }
 
         /***
          * 使用负载均衡和熔断选择provider
+         * 
          * @param candidate
          * @return
          */
@@ -171,7 +174,7 @@ public class ConsumerProxyFactory {
                 if (breaker.allowRequest()) {
                     return select;
                 }
-                //这里直接修改传入列表,减少后续工作量
+                // 这里直接修改传入列表,减少后续工作量
                 candidate.remove(select);
             }
             return null;
@@ -179,10 +182,10 @@ public class ConsumerProxyFactory {
 
         private Response doRetry(RpcCallMetrics metrics, List<ServiceMetadata> serviceMetadata) throws Exception {
             Throwable e = metrics.getThrowable();
-            //completeException异常结束之后,异常会用ExecutionException装着
+            // completeException异常结束之后,异常会用ExecutionException装着
             if (e instanceof ExecutionException ee && ee.getCause() instanceof RpcException rpcException
                 && !rpcException.retry()) {
-                //被限流之后是不应该重试的
+                // 被限流之后是不应该重试的
                 throw rpcException;
             }
             // 重试
@@ -196,7 +199,6 @@ public class ConsumerProxyFactory {
             return this.retryPolicy.retry(retryContext);
         }
 
-
         private RetryContext createRetryContextFromFailMetrics(RpcCallMetrics metrics,
             List<ServiceMetadata> serviceMetadata, long timeRemaining) {
             RetryContext retryContext = new RetryContext();
@@ -207,8 +209,7 @@ public class ConsumerProxyFactory {
             retryContext.setLoadBalancer(this.loadBalancer);
             retryContext.setRequestTimeoutMs(consumerProperties.getRequestTimeoutMs());
 
-
-            //把重试和 远程调用二者解耦
+            // 把重试和 远程调用二者解耦
             retryContext.setDoRpcFunction(provider -> {
                 CirCuitBreaker breaker = circuitBreakerManager.createOrGetBreaker(provider);
                 if (!breaker.allowRequest()) {
@@ -216,11 +217,11 @@ public class ConsumerProxyFactory {
                     breakerFuture.completeExceptionally(new RpcException("provider熔断"));
                     return breakerFuture;
                 }
-                //统计请求信息
+                // 统计请求信息
                 RpcCallMetrics retryMetrics =
                     RpcCallMetrics.createRpcMetrics(metrics.getMethod(), metrics.getParams(), provider);
                 CompletableFuture<Response> retryFuture =
-                    callRpcAsync (buildRequest(metrics.getMethod(), metrics.getParams()), provider);
+                    callRpcAsync(buildRequest(metrics.getMethod(), metrics.getParams()), provider);
                 retryFuture.whenComplete((r, retryE) -> {
                     if (null == retryE) {
                         retryMetrics.doComplete(r);
@@ -235,19 +236,18 @@ public class ConsumerProxyFactory {
         }
 
         private CompletableFuture<Response> callRpcAsync(Request request, ServiceMetadata provider) {
-            //TODO 如果 在在途请求管理器限流 是不是该直接返回,而不是继续访问
+            // TODO 如果 在在途请求管理器限流 是不是该直接返回,而不是继续访问
 
             CompletableFuture<Response> responseFuture =
                 inFlightRequestManager.inFlightRequest(request, consumerProperties.getRequestTimeoutMs(), provider);
-            if (responseFuture.isCompletedExceptionally()){
+            if (responseFuture.isCompletedExceptionally()) {
                 return responseFuture;
             }
 
             Channel channel = connectionManager.getChannel(provider);
 
-
             if (null == channel) {
-                //没有provider直接快速失败
+                // 没有provider直接快速失败
                 responseFuture.completeExceptionally(new RpcException("provider 连接失败"));
                 return responseFuture;
             }
@@ -274,10 +274,21 @@ public class ConsumerProxyFactory {
 
         private Request buildRequest(Method method, Object[] args) {
             Request request = new Request();
-            request.setServiceName(interfaceClass.getName());
-            request.setMethodName(method.getName());
-            request.setParamClass(method.getParameterTypes());
-            request.setParams(args);
+            boolean genericService = method.getName().equals("$invoke");
+            request.setGenericInvoke(genericService);
+            if (genericService) {
+                request.setParamsClassStr((String[])args[2]);
+                request.setServiceName(args[0].toString());
+                request.setMethodName(args[1].toString());
+                request.setParams((Object[])args[3]);
+            } else {
+                request.setServiceName(interfaceClass.getName());
+                request.setMethodName(method.getName());
+                request.setParamClass(method.getParameterTypes());
+                request.setParams(args);
+
+            }
+
             return request;
         }
 

@@ -1,10 +1,21 @@
 package com.littlewool.tech.insight.rpc.provider;
 
-import com.littlewool.tech.insight.rpc.handler.HeartbeatHandler;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import com.alibaba.fastjson2.JSONObject;
 import com.littlewool.tech.insight.rpc.codec.LWDecoder;
 import com.littlewool.tech.insight.rpc.codec.LWEncoder;
 import com.littlewool.tech.insight.rpc.compress.Compression;
 import com.littlewool.tech.insight.rpc.compress.CompressionManager;
+import com.littlewool.tech.insight.rpc.handler.HeartbeatHandler;
 import com.littlewool.tech.insight.rpc.handler.TrafficRecordHandler;
 import com.littlewool.tech.insight.rpc.limit.ConcurrencyLimiter;
 import com.littlewool.tech.insight.rpc.limit.Limiter;
@@ -16,6 +27,7 @@ import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
 import com.littlewool.tech.insight.rpc.register.ServieRegistry;
 import com.littlewool.tech.insight.rpc.serializer.Serializer;
 import com.littlewool.tech.insight.rpc.serializer.SerizalizerManager;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -31,13 +43,6 @@ import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.Locale;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.RejectedExecutionHandler;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-
 /**
  * @ClassName: Provider
  * @Description:
@@ -51,6 +56,8 @@ public class ProviderServer {
 
     // 注册表 记录当前provider提供的服务
     private final ProviderRegistry registry;
+
+    private final Set<Class<?>> NO_RESOLVE_CLASS_SET;
 
     // 注册中心 将自己注册到注册中心以便被consumer发现，在这里负责将注册表中的服务注册到注册中心
     private final ServieRegistry servieRegistry;
@@ -78,6 +85,11 @@ public class ProviderServer {
         this.serizalizerManager = new SerizalizerManager();
         this.compressionManager = new CompressionManager();
         this.invokeExecutor=new ThreadPoolExecutor(4,4,10,TimeUnit.SECONDS,new ArrayBlockingQueue<>(1024),new FastFailResponseHandler());
+        this.NO_RESOLVE_CLASS_SET=new HashSet<>();
+        NO_RESOLVE_CLASS_SET.add(int.class);
+        NO_RESOLVE_CLASS_SET.add(String.class);
+        NO_RESOLVE_CLASS_SET.add(Integer.class);
+
     }
 
     public void start() {
@@ -214,16 +226,64 @@ public class ProviderServer {
         public void run() {
             EventLoop eventLoop = ctx.channel().eventLoop();
             try {
+                Class[] paramsType = resolveMethodParamsType(request);
                 long startTime = System.currentTimeMillis();
                 Object result =
-                        invocation.invoke(request.getMethodName(), request.getParamClass(), request.getParams());
+                        invocation.invoke(request.getMethodName(),paramsType , resolveMethodParams(request,paramsType));
                 log.info("requestId{},{}函数被调用了{},结果是{},耗时是{},时间是{}", request.getRequestId(), request.getServiceName(),
                         request.getMethodName(), request, System.currentTimeMillis() - startTime,System.currentTimeMillis());
-
-                eventLoop.execute(()->ctx.writeAndFlush(Response.success(result, request.getRequestId())));
+                Object finalResult=request.isGenericInvoke()?resolveResult(result):result;
+                eventLoop.execute(()->ctx.writeAndFlush(Response.success(finalResult, request.getRequestId())));
             } catch (Exception e) {
                 eventLoop.execute(()->ctx.writeAndFlush(Response.fail(e.getMessage(), request.getRequestId())));
             }
+        }
+        private Object resolveResult(Object originResult){
+            Class<?> resultClass = originResult.getClass();
+            if (NO_RESOLVE_CLASS_SET.contains(resultClass)){
+                return originResult;
+            }
+            //如果传入是list 或是本身map 也需要判断
+            return new HashMap<>(JSONObject.from(originResult));
+        }
+
+        @SuppressWarnings("all")
+        private Object[] resolveMethodParams(Request request,Class[] paramsType){
+            if(!request.isGenericInvoke()){
+                return request.getParams();
+            }
+            Object[] params=request.getParams();
+            Object[] result=new Object[params.length];
+            for (int i=0;i<params.length;i++){
+                if (params[i] instanceof Map){
+                    result[i]=new JSONObject((Map)params[i]).toJavaObject(paramsType[i]);
+                }else {
+                    result[i]=params[i];
+                }
+            }
+            return result;
+
+        }
+        @SuppressWarnings("all")
+        private Class[] resolveMethodParamsType(Request request) throws ClassNotFoundException {
+            if(!request.isGenericInvoke()){
+                return request.getParamClass();
+            }
+            String[] paramsClassStr = request.getParamsClassStr();
+            Class[] paramClass=new Class[paramsClassStr.length];
+            for (int i = 0; i < paramsClassStr.length; i++) {
+                String classStr=paramsClassStr[i];
+                paramClass[i]=analysisFromString(classStr);
+            }
+            return paramClass;
+        }
+
+        //为什么这里是class<?> 而不是class
+        private Class<?> analysisFromString(String classStr) throws ClassNotFoundException {
+            if (classStr.equals("int")){
+                return int.class;
+            }
+            return Class.forName(classStr);
         }
     }
 

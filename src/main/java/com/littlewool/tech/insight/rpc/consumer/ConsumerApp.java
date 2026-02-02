@@ -1,10 +1,13 @@
 package com.littlewool.tech.insight.rpc.consumer;
 
 import com.littlewool.tech.insight.rpc.api.Add;
+import com.littlewool.tech.insight.rpc.api.User;
 import com.littlewool.tech.insight.rpc.register.RegistryConfig;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 
@@ -25,24 +28,21 @@ public class ConsumerApp {
         consumerProperties.setRegistryConfig(registryConfig);
         ConsumerProxyFactory consumerProxyFactory = new ConsumerProxyFactory(consumerProperties);
         Add consumer = consumerProxyFactory.createConsumerProxy(Add.class);
-        new Thread(()->{
-            while (true){
-                LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
-                long startTime=System.currentTimeMillis();
-                log.info("开始时间{}",System.currentTimeMillis());
-                System.out.println(consumer.add(1, 2)+" "+(System.currentTimeMillis()-startTime)+"毫秒");
-            }
-        }).start();
-//        new Thread(()->{
-//            while (true){
-//                LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
-//                long startTime=System.currentTimeMillis();
-//
-//                System.out.println(consumer.minus(1,2)+" "+(System.currentTimeMillis()-startTime)+"毫秒");
-//                System.out.println(startTime+"--------"+System.currentTimeMillis());
-//            }
-//        }).start();
+        System.out.println("第一次调用"+consumer.add(1,2));
+        GenericConsumer genericConsumer=consumerProxyFactory.createConsumerProxy(GenericConsumer.class);
+        System.out.println("第二次调用"+genericConsumer.$invoke(Add.class.getName(),"add",new String[]{"int","int"},new Object[]{12,13}));
 
+        Map<String,Object> user1=new HashMap<>();
+        user1.put("name","zhangsan");
+        user1.put("age",13);
+        Map<String,Object> user2=new HashMap<>();
+        user2.put("name","lisi");
+        user2.put("age",12);
+        System.out.println("第三次调用"+genericConsumer.$invoke(Add.class.getName()
+                ,"mergeAge"
+                ,new String[]{User.class.getName()
+                        ,User.class.getName()}
+                ,new Object[]{user1,user2}));
 
     }
 

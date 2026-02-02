@@ -20,7 +20,11 @@ public class Request  implements Serializable {
 
     private String serviceName;
 
+    private boolean genericInvoke;
+
     private String methodName;
+
+    private String[] paramsClassStr;
 
     private Class<?>[] paramClass;
 
