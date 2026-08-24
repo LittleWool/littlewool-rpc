@@ -60,6 +60,20 @@ public class DistributedLimiterOptimizationTest {
         assertTrue(store.tokenBucketCalls() < 16);
     }
 
+    @Test
+    public void shardedRedisStoreRoutesShardKeysEvenly() {
+        RecordingDistributedLimitStore nodeA = new RecordingDistributedLimitStore();
+        RecordingDistributedLimitStore nodeB = new RecordingDistributedLimitStore();
+        DistributedLimitStore store = new ShardedRedisDistributedLimitStore(nodeA, nodeB);
+
+        for (int i = 0; i < 8; i++) {
+            store.tryAcquire("rpc:limit:shard:" + i, 100, 1, TimeUnit.SECONDS);
+        }
+
+        assertEquals(4, nodeA.fixedWindowCalls());
+        assertEquals(4, nodeB.fixedWindowCalls());
+    }
+
     private static ExerciseResult exercise(Limiter limiter, int attempts) {
         int allowed = 0;
         int rejected = 0;
@@ -132,6 +146,26 @@ public class DistributedLimiterOptimizationTest {
                 return Collections.max(callsByKey.values(), (left, right) -> Integer.compare(left.get(), right.get()))
                     .get();
             }
+        }
+    }
+
+    private static class RecordingDistributedLimitStore implements DistributedLimitStore {
+
+        private final AtomicInteger fixedWindowCalls = new AtomicInteger();
+
+        @Override
+        public boolean tryAcquire(String key, int maxPermits, long window, TimeUnit unit) {
+            fixedWindowCalls.incrementAndGet();
+            return true;
+        }
+
+        @Override
+        public int tryAcquireTokens(String key, int permitsPerSecond, int capacity, int requestPermits) {
+            return requestPermits;
+        }
+
+        private int fixedWindowCalls() {
+            return fixedWindowCalls.get();
         }
     }
 }

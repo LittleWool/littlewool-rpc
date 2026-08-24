@@ -123,7 +123,7 @@ public class HighQpsDistributedLimiter implements Limiter {
         //本地 token 池按批量取号消费，不需要释放令牌
     }
 
-    int currentBatchSize() {
+    public int currentBatchSize() {
         return batchSize.get();
     }
 
