@@ -68,6 +68,7 @@ public class InFlightRequestManager {
         Limiter channelLimiter = channelLimiterMap.computeIfAbsent(metadata, k -> new RateLimiter(consumerProperties.getRpcPerChannel()));
         if(!channelLimiter.tryAcquire()){
             //针对同一个provider的限流
+            globalLimiter.release();
             responseFuture.completeExceptionally(new LimitException("channel限流,当前在途请求超过阈值"));
             return responseFuture;
         }
