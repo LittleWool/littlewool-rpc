@@ -34,7 +34,7 @@ public class TrafficRecordHandler extends ChannelDuplexHandler {
         if(msg instanceof ByteBuf byteBuf){
             trafficRecord.upload.getAndAdd(byteBuf.readableBytes());
         }
-       ctx.write(msg);
+       ctx.write(msg, promise);
     }
 
     @Override
