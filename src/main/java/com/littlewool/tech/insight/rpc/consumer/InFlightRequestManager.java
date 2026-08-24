@@ -9,7 +9,7 @@ import java.util.concurrent.TimeoutException;
 import com.littlewool.tech.insight.rpc.exception.LimitException;
 import com.littlewool.tech.insight.rpc.limit.ConcurrencyLimiter;
 import com.littlewool.tech.insight.rpc.limit.Limiter;
-import com.littlewool.tech.insight.rpc.limit.RateLimiter;
+import com.littlewool.tech.insight.rpc.limit.LeakyBucketLimiter;
 import com.littlewool.tech.insight.rpc.message.Request;
 import com.littlewool.tech.insight.rpc.message.Response;
 import com.littlewool.tech.insight.rpc.register.ServiceMetadata;
@@ -65,7 +65,8 @@ public class InFlightRequestManager {
             return responseFuture;
         }
 
-        Limiter channelLimiter = channelLimiterMap.computeIfAbsent(metadata, k -> new RateLimiter(consumerProperties.getRpcPerChannel()));
+        Limiter channelLimiter =
+            channelLimiterMap.computeIfAbsent(metadata, k -> new LeakyBucketLimiter(consumerProperties.getRpcPerChannel()));
         if(!channelLimiter.tryAcquire()){
             //针对同一个provider的限流
             globalLimiter.release();

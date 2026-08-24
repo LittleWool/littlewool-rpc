@@ -77,9 +77,17 @@ public class ResponseTimeCircuitBreaker implements CirCuitBreaker {
 
         boolean slowRequest = !metrics.isComplete() || metrics.getDuration() > slowRequestMs;
         switch (stateReference.get()) {
-            case OPEN -> processOpen(slowRequest);
-            case CLOSE -> processClose(slowRequest);
-            case HALF_OPEN -> processHalfOpen(slowRequest);
+            case OPEN:
+                processOpen(slowRequest);
+                break;
+            case CLOSE:
+                processClose(slowRequest);
+                break;
+            case HALF_OPEN:
+                processHalfOpen(slowRequest);
+                break;
+            default:
+                break;
         }
     }
 

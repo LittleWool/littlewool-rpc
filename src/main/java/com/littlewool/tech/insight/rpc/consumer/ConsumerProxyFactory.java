@@ -87,11 +87,14 @@ public class ConsumerProxyFactory {
     }
 
     private LoadBalancer createLoadBalancer() {
-        return switch (this.consumerProperties.getLoadBalancePolicy()) {
-            case "robin" -> new RoundRobinLoadBalancer();
-            case "random" -> new RandomLoadBalancer();
-            default -> throw new IllegalArgumentException(this.consumerProperties.getLoadBalancePolicy() + "负载均衡不支持");
-        };
+        switch (this.consumerProperties.getLoadBalancePolicy()) {
+            case "robin":
+                return new RoundRobinLoadBalancer();
+            case "random":
+                return new RandomLoadBalancer();
+            default:
+                throw new IllegalArgumentException(this.consumerProperties.getLoadBalancePolicy() + "负载均衡不支持");
+        }
     }
 
     private class ConsumerInvocationHandler implements InvocationHandler {
@@ -183,10 +186,12 @@ public class ConsumerProxyFactory {
         private Response doRetry(RpcCallMetrics metrics, List<ServiceMetadata> serviceMetadata) throws Exception {
             Throwable e = metrics.getThrowable();
             // completeException异常结束之后,异常会用ExecutionException装着
-            if (e instanceof ExecutionException ee && ee.getCause() instanceof RpcException rpcException
-                && !rpcException.retry()) {
-                // 被限流之后是不应该重试的
-                throw rpcException;
+            if (e instanceof ExecutionException && ((ExecutionException)e).getCause() instanceof RpcException) {
+                RpcException rpcException = (RpcException)((ExecutionException)e).getCause();
+                if (!rpcException.retry()) {
+                    // 被限流之后是不应该重试的
+                    throw rpcException;
+                }
             }
             // 重试
             long timeRemaining = consumerProperties.getMethodTimeoutMs() - metrics.getDuration();
@@ -264,7 +269,7 @@ public class ConsumerProxyFactory {
             return responseFuture;
         }
 
-        private static Object processResponse(Response response) {
+        private Object processResponse(Response response) {
             log.info(response.toString());
             if (response.getCode() == 200) {
                 return response.getResult();
@@ -293,12 +298,16 @@ public class ConsumerProxyFactory {
         }
 
         private Object invokeObjectMethod(Object proxy, Method method, Object[] args) {
-            return switch (method.getName()) {
-                case "toString" -> "LittleWool Proxy Consumer " + interfaceClass.getName();
-                case "equals" -> proxy == args[0];
-                case "hashCode" -> System.identityHashCode(proxy);
-                default -> throw new UnsupportedOperationException("代理对象不支持该函数" + method.getName());
-            };
+            switch (method.getName()) {
+                case "toString":
+                    return "LittleWool Proxy Consumer " + interfaceClass.getName();
+                case "equals":
+                    return proxy == args[0];
+                case "hashCode":
+                    return System.identityHashCode(proxy);
+                default:
+                    throw new UnsupportedOperationException("代理对象不支持该函数" + method.getName());
+            }
         }
     }
 

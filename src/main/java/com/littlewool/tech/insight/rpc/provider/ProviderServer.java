@@ -19,7 +19,7 @@ import com.littlewool.tech.insight.rpc.handler.HeartbeatHandler;
 import com.littlewool.tech.insight.rpc.handler.TrafficRecordHandler;
 import com.littlewool.tech.insight.rpc.limit.ConcurrencyLimiter;
 import com.littlewool.tech.insight.rpc.limit.Limiter;
-import com.littlewool.tech.insight.rpc.limit.RateLimiter;
+import com.littlewool.tech.insight.rpc.limit.LeakyBucketLimiter;
 import com.littlewool.tech.insight.rpc.message.Request;
 import com.littlewool.tech.insight.rpc.message.Response;
 import com.littlewool.tech.insight.rpc.register.DefaultServiceRegistry;
@@ -143,8 +143,8 @@ public class ProviderServer {
 
     // 限流获取令牌之后需要释放，故是双向处理器
     public class LimitHandler extends ChannelDuplexHandler {
-        private static final AttributeKey<Limiter> CHANNEL_LIMITER_KEY = AttributeKey.valueOf("channle_limiter_key");
-        private static final AttributeKey<AtomicInteger> GLOBAL_PERMITS = AttributeKey.valueOf("global_permits");
+        private final AttributeKey<Limiter> CHANNEL_LIMITER_KEY = AttributeKey.valueOf("channle_limiter_key");
+        private final AttributeKey<AtomicInteger> GLOBAL_PERMITS = AttributeKey.valueOf("global_permits");
 
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
@@ -191,7 +191,7 @@ public class ProviderServer {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) {
-            RateLimiter channelLimiter = new RateLimiter(providerProporties.getPerConsumerMaxRequest());
+            LeakyBucketLimiter channelLimiter = new LeakyBucketLimiter(providerProporties.getPerConsumerMaxRequest());
             ctx.channel().attr(CHANNEL_LIMITER_KEY).set(channelLimiter);
             ctx.channel().attr(GLOBAL_PERMITS).set(new AtomicInteger(0));
             ctx.fireChannelActive();
@@ -202,7 +202,8 @@ public class ProviderServer {
 
         @Override
         public void rejectedExecution(Runnable task, ThreadPoolExecutor executor) {
-            if(task instanceof InvokeTask invokeTask ){
+            if(task instanceof InvokeTask){
+                InvokeTask invokeTask = (InvokeTask)task;
                 Response response = Response.fail("服务器繁忙", invokeTask.request.getRequestId());
                 invokeTask.ctx.writeAndFlush(response);
                 return;

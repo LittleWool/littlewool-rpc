@@ -23,7 +23,8 @@ public class TrafficRecordHandler extends ChannelDuplexHandler {
     private TrafficRecord trafficRecord;
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        if(msg instanceof ByteBuf byteBuf){
+        if(msg instanceof ByteBuf){
+            ByteBuf byteBuf = (ByteBuf)msg;
             trafficRecord.download.getAndAdd(byteBuf.readableBytes());
         }
         ctx.fireChannelRead(msg);
@@ -31,7 +32,8 @@ public class TrafficRecordHandler extends ChannelDuplexHandler {
 
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-        if(msg instanceof ByteBuf byteBuf){
+        if(msg instanceof ByteBuf){
+            ByteBuf byteBuf = (ByteBuf)msg;
             trafficRecord.upload.getAndAdd(byteBuf.readableBytes());
         }
        ctx.write(msg, promise);

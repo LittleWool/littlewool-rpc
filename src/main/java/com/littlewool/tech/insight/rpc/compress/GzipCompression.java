@@ -35,7 +35,7 @@ public class GzipCompression implements Compression {
             byte[] buffer = new byte[4096];
             int len;
             while ((len = gzipInputStream.read(buffer)) != -1) {
-                bos.write(bytes, 0, len);
+                bos.write(buffer, 0, len);
             }
             return bos.toByteArray();
         } catch (Exception e) {

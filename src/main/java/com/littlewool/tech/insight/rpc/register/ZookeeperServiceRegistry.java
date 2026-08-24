@@ -10,6 +10,7 @@ import org.apache.curator.x.discovery.ServiceInstance;
 import org.apache.curator.x.discovery.details.JsonInstanceSerializer;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @ClassName: ZookeeperServiceRegistry
@@ -63,7 +64,8 @@ public class   ZookeeperServiceRegistry implements ServieRegistry {
     @Override
     public List<ServiceMetadata> fetchServiceList(String serviceName) throws Exception {
 
-        return discovery.queryForInstances(serviceName).stream().map(ServiceInstance::getPayload).toList();
+        return discovery.queryForInstances(serviceName).stream().map(ServiceInstance::getPayload)
+            .collect(Collectors.toList());
 
     }
 }

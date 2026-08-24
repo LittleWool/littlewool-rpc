@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /***
  * 现在实现并不平滑,假设允许1s进入1w请求，在0.95-1.05的时间区间，就可以进入2w,压力巨大。
  * 可以通过调短定时任务间隔，增加任务频率，限流越精准。但对定时任务压力来说巨大
- * 所以改为事件驱动的RateLimiter
+ * 所以改为事件驱动的LeakyBucketLimiter
  * */
 
 @Deprecated
