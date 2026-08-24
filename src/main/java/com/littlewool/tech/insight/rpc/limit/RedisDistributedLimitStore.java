@@ -5,12 +5,14 @@ import redis.clients.jedis.DefaultJedisClientConfig;
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.JedisClientConfig;
 import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.exceptions.JedisException;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 
 import java.io.Closeable;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.NoSuchElementException;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -100,6 +102,8 @@ public class RedisDistributedLimitStore implements DistributedLimitStore, Closea
                 Arrays.asList(String.valueOf(maxPermits), String.valueOf(windowMs),
                     String.valueOf(System.currentTimeMillis())));
             return toLong(result) == 1L;
+        } catch (JedisException | NoSuchElementException e) {
+            return false;
         }
     }
 
@@ -119,6 +123,8 @@ public class RedisDistributedLimitStore implements DistributedLimitStore, Closea
                 Arrays.asList(String.valueOf(permitsPerSecond), String.valueOf(capacity),
                     String.valueOf(requestPermits), String.valueOf(System.currentTimeMillis())));
             return (int)toLong(result);
+        } catch (JedisException | NoSuchElementException e) {
+            return 0;
         }
     }
 

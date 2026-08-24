@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class DistributedLimiterOptimizationTest {
@@ -79,6 +80,16 @@ public class DistributedLimiterOptimizationTest {
         assertEquals(50, RedisDistributedLimitStore.defaultClientConfig().getConnectionTimeoutMillis());
         assertEquals(30, RedisDistributedLimitStore.defaultClientConfig().getSocketTimeoutMillis());
         assertEquals(10, RedisDistributedLimitStore.defaultPoolConfig().getMaxWaitDuration().toMillis());
+    }
+
+    @Test
+    public void redisStoreRejectsWhenCenterIsUnavailable() {
+        RedisDistributedLimitStore store = new RedisDistributedLimitStore("127.0.0.1", 1);
+
+        assertFalse(store.tryAcquire("unavailable", 1, 1, TimeUnit.SECONDS));
+        assertEquals(0, store.tryAcquireTokens("unavailable", 1, 1, 1));
+
+        store.close();
     }
 
     private static ExerciseResult exercise(Limiter limiter, int attempts) {
