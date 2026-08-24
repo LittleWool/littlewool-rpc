@@ -2,7 +2,6 @@ package com.littlewool.tech.insight.rpc.breaker;
 
 import com.littlewool.tech.insight.rpc.metrics.RpcCallMetrics;
 
-import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
@@ -51,7 +50,9 @@ public class ResponseTimeCircuitBreaker implements CirCuitBreaker {
     public ResponseTimeCircuitBreaker(double slowRatio, long slowRequestMs) {
         this.slowRatio = slowRatio;
         this.slowRequestMs = slowRequestMs;
-        Arrays.fill(slots, new Slot());
+        for (int i = 0; i < slots.length; i++) {
+            slots[i] = new Slot();
+        }
     }
 
     @Override
@@ -119,14 +120,14 @@ public class ResponseTimeCircuitBreaker implements CirCuitBreaker {
     }
 
     private void slideWindowIfNecessary(long now) {
-        if (now - currentIndex < slotMs) {
+        if (now - currentTime < slotMs) {
             return;
         }
         try {
             //存在问题，后到的拿到了锁，导致请求在前的直接返回。而直接把自己的请求统计在后到的位置
             //不需要修改：1.发生概率低 2.这是个熔断器的统计一段时间内的数据，即使存在一些误差也问题不大
             slideLock.lock();
-            int diff = (int) ((now - currentIndex) / slotMs);
+            int diff = (int) ((now - currentTime) / slotMs);
             if (diff <= 0) {
                 //双重检查锁
                 return;
