@@ -29,11 +29,11 @@ public class RateLimiter implements Limiter {
 
     @Override
     public boolean tryAcquire() {
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
         for (int i = 0; i < MAX_TRY_ACQUIRE; i++) {
             long pre = nextNs.get();
             //若是只有两个发生竞争,但令牌刚好被替换了，不应当直接返回false，应当给一定时间进行重试
-            if (start + MAX_QUEUE_NS < pre) {
+            if (pre - start > MAX_QUEUE_NS) {
                 return false;
             }
             if (nextNs.compareAndSet(pre, Math.max(pre, start) + intervalNs)) {
