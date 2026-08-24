@@ -296,7 +296,7 @@ public class ConsumerProxyFactory {
             return switch (method.getName()) {
                 case "toString" -> "LittleWool Proxy Consumer " + interfaceClass.getName();
                 case "equals" -> proxy == args[0];
-                case "hashCOde" -> System.identityHashCode(proxy);
+                case "hashCode" -> System.identityHashCode(proxy);
                 default -> throw new UnsupportedOperationException("代理对象不支持该函数" + method.getName());
             };
         }
