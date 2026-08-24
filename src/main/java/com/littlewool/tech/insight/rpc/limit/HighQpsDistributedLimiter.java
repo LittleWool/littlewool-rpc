@@ -75,7 +75,7 @@ public class HighQpsDistributedLimiter implements Limiter {
                 return true;
             }
             int requested = batchSize.get();
-            int acquired = store.tryAcquireTokens(nextShardKey(), permitsPerShard, capacityPerShard, requested);
+            int acquired = tryAcquireFromShards(requested);
             adjustBatchSize(requested, acquired);
             if (acquired <= 0) {
                 return false;
@@ -83,6 +83,14 @@ public class HighQpsDistributedLimiter implements Limiter {
             localTokens.addAndGet(acquired);
             return consumeLocalToken();
         }
+    }
+
+    private int tryAcquireFromShards(int requested) {
+        int acquired = 0;
+        for (int i = 0; i < shardCount && acquired <= 0; i++) {
+            acquired = store.tryAcquireTokens(nextShardKey(), permitsPerShard, capacityPerShard, requested);
+        }
+        return acquired;
     }
 
     private boolean consumeLocalToken() {
@@ -113,6 +121,10 @@ public class HighQpsDistributedLimiter implements Limiter {
     @Override
     public void release(int permits) {
         //本地 token 池按批量取号消费，不需要释放令牌
+    }
+
+    int currentBatchSize() {
+        return batchSize.get();
     }
 
     private static int ceilDiv(int value, int divisor) {
