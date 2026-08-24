@@ -74,6 +74,13 @@ public class DistributedLimiterOptimizationTest {
         assertEquals(4, nodeB.fixedWindowCalls());
     }
 
+    @Test
+    public void redisStoreUsesShortTimeoutsForHotPath() {
+        assertEquals(50, RedisDistributedLimitStore.defaultClientConfig().getConnectionTimeoutMillis());
+        assertEquals(30, RedisDistributedLimitStore.defaultClientConfig().getSocketTimeoutMillis());
+        assertEquals(10, RedisDistributedLimitStore.defaultPoolConfig().getMaxWaitDuration().toMillis());
+    }
+
     private static ExerciseResult exercise(Limiter limiter, int attempts) {
         int allowed = 0;
         int rejected = 0;

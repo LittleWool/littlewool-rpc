@@ -1,9 +1,14 @@
 package com.littlewool.tech.insight.rpc.limit;
 
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.DefaultJedisClientConfig;
+import redis.clients.jedis.HostAndPort;
+import redis.clients.jedis.JedisClientConfig;
 import redis.clients.jedis.JedisPool;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 
 import java.io.Closeable;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
@@ -16,6 +21,12 @@ import java.util.concurrent.TimeUnit;
  * @Version: 1.0
  **/
 public class RedisDistributedLimitStore implements DistributedLimitStore, Closeable {
+
+    public static final int DEFAULT_CONNECT_TIMEOUT_MS = 50;
+
+    public static final int DEFAULT_SOCKET_TIMEOUT_MS = 30;
+
+    public static final int DEFAULT_POOL_MAX_WAIT_MS = 10;
 
     private static final String FIXED_WINDOW_SCRIPT =
         "local key = KEYS[1]\n"
@@ -65,7 +76,7 @@ public class RedisDistributedLimitStore implements DistributedLimitStore, Closea
     private final JedisPool jedisPool;
 
     public RedisDistributedLimitStore(String host, int port) {
-        this(new JedisPool(host, port));
+        this(createDefaultJedisPool(host, port));
     }
 
     public RedisDistributedLimitStore(JedisPool jedisPool) {
@@ -114,6 +125,23 @@ public class RedisDistributedLimitStore implements DistributedLimitStore, Closea
     @Override
     public void close() {
         jedisPool.close();
+    }
+
+    static JedisPool createDefaultJedisPool(String host, int port) {
+        return new JedisPool(defaultPoolConfig(), new HostAndPort(host, port), defaultClientConfig());
+    }
+
+    static GenericObjectPoolConfig<Jedis> defaultPoolConfig() {
+        GenericObjectPoolConfig<Jedis> config = new GenericObjectPoolConfig<>();
+        config.setMaxWait(Duration.ofMillis(DEFAULT_POOL_MAX_WAIT_MS));
+        return config;
+    }
+
+    static JedisClientConfig defaultClientConfig() {
+        return DefaultJedisClientConfig.builder()
+            .connectionTimeoutMillis(DEFAULT_CONNECT_TIMEOUT_MS)
+            .socketTimeoutMillis(DEFAULT_SOCKET_TIMEOUT_MS)
+            .build();
     }
 
     private static long toLong(Object result) {
