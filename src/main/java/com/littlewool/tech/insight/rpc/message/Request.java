@@ -1,5 +1,6 @@
 package com.littlewool.tech.insight.rpc.message;
 
+import com.alibaba.fastjson2.annotation.JSONField;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -20,6 +21,8 @@ public class Request  implements Serializable {
 
     private String serviceName;
 
+    private InvocationType invocationType = InvocationType.NORMAL;
+
     private boolean genericInvoke;
 
     private String methodName;
@@ -30,4 +33,18 @@ public class Request  implements Serializable {
 
     private Object[] params;
 
+    public void markNormalInvoke() {
+        this.invocationType = InvocationType.NORMAL;
+        this.genericInvoke = false;
+    }
+
+    public void markGenericInvoke() {
+        this.invocationType = InvocationType.GENERIC;
+        this.genericInvoke = true;
+    }
+
+    @JSONField(serialize = false)
+    public boolean isGenericCall() {
+        return invocationType == InvocationType.GENERIC || genericInvoke;
+    }
 }

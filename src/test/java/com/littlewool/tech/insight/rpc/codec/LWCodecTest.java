@@ -1,6 +1,7 @@
 package com.littlewool.tech.insight.rpc.codec;
 
 import com.littlewool.tech.insight.rpc.compress.CompressionManager;
+import com.littlewool.tech.insight.rpc.message.InvocationType;
 import com.littlewool.tech.insight.rpc.message.Request;
 import com.littlewool.tech.insight.rpc.serializer.SerizalizerManager;
 import io.netty.buffer.ByteBuf;
@@ -16,6 +17,7 @@ public class LWCodecTest {
     public void encodesAndDecodesRequest() {
         EmbeddedChannel outbound = channel();
         Request request = new Request();
+        request.markNormalInvoke();
         request.setServiceName("demoService");
         request.setMethodName("hello");
         request.setParamClass(new Class<?>[] {String.class});
@@ -29,9 +31,37 @@ public class LWCodecTest {
         Request decoded = inbound.readInbound();
 
         assertEquals(request.getRequestId(), decoded.getRequestId());
+        assertEquals(InvocationType.NORMAL, decoded.getInvocationType());
         assertEquals("demoService", decoded.getServiceName());
         assertEquals("hello", decoded.getMethodName());
         assertEquals("littlewool", decoded.getParams()[0]);
+
+        outbound.finishAndReleaseAll();
+        inbound.finishAndReleaseAll();
+    }
+
+    @Test
+    public void encodesAndDecodesGenericRequest() {
+        EmbeddedChannel outbound = channel();
+        Request request = new Request();
+        request.markGenericInvoke();
+        request.setServiceName("demoService");
+        request.setMethodName("merge");
+        request.setParamsClassStr(new String[] {"java.lang.String"});
+        request.setParams(new Object[] {"littlewool"});
+
+        assertTrue(outbound.writeOutbound(request));
+        ByteBuf frame = outbound.readOutbound();
+
+        EmbeddedChannel inbound = channel();
+        assertTrue(inbound.writeInbound(frame));
+        Request decoded = inbound.readInbound();
+
+        assertEquals(InvocationType.GENERIC, decoded.getInvocationType());
+        assertTrue(decoded.isGenericCall());
+        assertEquals("demoService", decoded.getServiceName());
+        assertEquals("merge", decoded.getMethodName());
+        assertEquals("java.lang.String", decoded.getParamsClassStr()[0]);
 
         outbound.finishAndReleaseAll();
         inbound.finishAndReleaseAll();

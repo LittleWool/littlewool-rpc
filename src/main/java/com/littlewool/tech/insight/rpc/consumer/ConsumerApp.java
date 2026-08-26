@@ -29,7 +29,7 @@ public class ConsumerApp {
         ConsumerProxyFactory consumerProxyFactory = new ConsumerProxyFactory(consumerProperties);
         Add consumer = consumerProxyFactory.createConsumerProxy(Add.class);
         System.out.println("第一次调用"+consumer.add(1,2));
-        GenericConsumer genericConsumer=consumerProxyFactory.createConsumerProxy(GenericConsumer.class);
+        GenericConsumer genericConsumer=consumerProxyFactory.createGenericConsumerProxy();
         System.out.println("第二次调用"+genericConsumer.$invoke(Add.class.getName(),"add",new String[]{"int","int"},new Object[]{12,13}));
 
         Map<String,Object> user1=new HashMap<>();

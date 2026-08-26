@@ -78,6 +78,10 @@ public class ConsumerProxyFactory {
                 createRetryPolicy(consumerProperties.getRetryPolicy())));
     }
 
+    public GenericConsumer createGenericConsumerProxy() {
+        return createConsumerProxy(GenericConsumer.class);
+    }
+
     private RetryPolicy createRetryPolicy(String retryPolicyName) {
         RetryPolicy retryPolicy = retryPolicyManager.getRetryPolicy(retryPolicyName);
         if (null == retryPolicy) {
@@ -116,7 +120,7 @@ public class ConsumerProxyFactory {
             if (method.getDeclaringClass() == Object.class) {
                 return invokeObjectMethod(proxy, method, args);
             }
-            boolean genericInvoke = method.getName().equals("$invoke");
+            boolean genericInvoke = isGenericInvokeMethod(method);
             String serviceName = genericInvoke ? args[0].toString() : interfaceClass.getName();
             // 注册中心查询服务
             List<ServiceMetadata> serviceMetadata = new ArrayList<>(servieRegistry.fetchServiceList(serviceName));
@@ -279,14 +283,16 @@ public class ConsumerProxyFactory {
 
         private Request buildRequest(Method method, Object[] args) {
             Request request = new Request();
-            boolean genericService = method.getName().equals("$invoke");
-            request.setGenericInvoke(genericService);
+            boolean genericService = isGenericInvokeMethod(method);
             if (genericService) {
+                validateGenericInvokeArgs(args);
+                request.markGenericInvoke();
                 request.setParamsClassStr((String[])args[2]);
                 request.setServiceName(args[0].toString());
                 request.setMethodName(args[1].toString());
                 request.setParams((Object[])args[3]);
             } else {
+                request.markNormalInvoke();
                 request.setServiceName(interfaceClass.getName());
                 request.setMethodName(method.getName());
                 request.setParamClass(method.getParameterTypes());
@@ -295,6 +301,40 @@ public class ConsumerProxyFactory {
             }
 
             return request;
+        }
+
+        private boolean isGenericInvokeMethod(Method method) {
+            Class<?>[] parameterTypes = method.getParameterTypes();
+            return method.getDeclaringClass() == GenericConsumer.class
+                && "$invoke".equals(method.getName())
+                && parameterTypes.length == 4
+                && parameterTypes[0] == String.class
+                && parameterTypes[1] == String.class
+                && parameterTypes[2] == String[].class
+                && parameterTypes[3] == Object[].class;
+        }
+
+        private void validateGenericInvokeArgs(Object[] args) {
+            if (args == null || args.length != 4) {
+                throw new IllegalArgumentException("泛化调用参数格式错误");
+            }
+            if (!(args[0] instanceof String) || ((String)args[0]).isEmpty()) {
+                throw new IllegalArgumentException("泛化调用 serviceName 不能为空");
+            }
+            if (!(args[1] instanceof String) || ((String)args[1]).isEmpty()) {
+                throw new IllegalArgumentException("泛化调用 methodName 不能为空");
+            }
+            if (!(args[2] instanceof String[])) {
+                throw new IllegalArgumentException("泛化调用 paramsType 必须是 String[]");
+            }
+            if (!(args[3] instanceof Object[])) {
+                throw new IllegalArgumentException("泛化调用 params 必须是 Object[]");
+            }
+            String[] paramTypes = (String[])args[2];
+            Object[] params = (Object[])args[3];
+            if (paramTypes.length != params.length) {
+                throw new IllegalArgumentException("泛化调用参数类型数量和参数数量不一致");
+            }
         }
 
         private Object invokeObjectMethod(Object proxy, Method method, Object[] args) {

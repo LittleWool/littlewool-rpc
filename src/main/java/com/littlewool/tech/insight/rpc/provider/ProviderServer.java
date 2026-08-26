@@ -233,7 +233,7 @@ public class ProviderServer {
                         invocation.invoke(request.getMethodName(),paramsType , resolveMethodParams(request,paramsType));
                 log.info("requestId{},{}函数被调用了{},结果是{},耗时是{},时间是{}", request.getRequestId(), request.getServiceName(),
                         request.getMethodName(), request, System.currentTimeMillis() - startTime,System.currentTimeMillis());
-                Object finalResult=request.isGenericInvoke()?resolveResult(result):result;
+                Object finalResult=request.isGenericCall()?resolveResult(result):result;
                 eventLoop.execute(()->ctx.writeAndFlush(Response.success(finalResult, request.getRequestId())));
             } catch (Exception e) {
                 eventLoop.execute(()->ctx.writeAndFlush(Response.fail(e.getMessage(), request.getRequestId())));
@@ -250,7 +250,7 @@ public class ProviderServer {
 
         @SuppressWarnings("all")
         private Object[] resolveMethodParams(Request request,Class[] paramsType){
-            if(!request.isGenericInvoke()){
+            if(!request.isGenericCall()){
                 return request.getParams();
             }
             Object[] params=request.getParams();
@@ -267,7 +267,7 @@ public class ProviderServer {
         }
         @SuppressWarnings("all")
         private Class[] resolveMethodParamsType(Request request) throws ClassNotFoundException {
-            if(!request.isGenericInvoke()){
+            if(!request.isGenericCall()){
                 return request.getParamClass();
             }
             String[] paramsClassStr = request.getParamsClassStr();
@@ -281,10 +281,28 @@ public class ProviderServer {
 
         //为什么这里是class<?> 而不是class
         private Class<?> analysisFromString(String classStr) throws ClassNotFoundException {
-            if (classStr.equals("int")){
-                return int.class;
+            switch (classStr) {
+                case "boolean":
+                    return boolean.class;
+                case "byte":
+                    return byte.class;
+                case "short":
+                    return short.class;
+                case "char":
+                    return char.class;
+                case "int":
+                    return int.class;
+                case "long":
+                    return long.class;
+                case "float":
+                    return float.class;
+                case "double":
+                    return double.class;
+                case "void":
+                    return void.class;
+                default:
+                    return Class.forName(classStr);
             }
-            return Class.forName(classStr);
         }
     }
 
